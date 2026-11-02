@@ -1,0 +1,6 @@
+# classic ESP32 boards (both CYDs, OWLOSAirQuality): full speed
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+# the flash at 80 MHz on four lines (how Arduino flashes these boards too): the code and the fonts
+# that do not fit in IRAM are read from it. the 3.5" radar went 124 -> 99 ms a frame with it
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y

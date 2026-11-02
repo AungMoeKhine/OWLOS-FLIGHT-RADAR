@@ -1,0 +1,16 @@
+firmware/build/
+firmware/build_*/
+firmware/sdkconfig
+firmware/sdkconfig.old
+firmware/managed_components/
+firmware/dependencies.lock
+tools/preview/build/
+tools/FontBake/bin/
+tools/FontBake/obj/
+tools/QrBake/bin/
+tools/QrBake/obj/
+.vs/
+.vscode/
+tools/preview/tiles/
+tools/Guide/bin/
+tools/Guide/obj/

@@ -1,0 +1,108 @@
+# OWLOS Flight Radar - build the firmware and put it on GitHub Pages, next to the page that
+# flashes it and sends the board its settings (ESP Web Tools and Web Serial, Chrome/Edge).
+#
+# One job a screen in Espressif's own ESP-IDF 5.5 image, then one job puts the page, the
+# screenshots and the binaries together and publishes them. The e-paper boards are not here yet.
+#
+# Needs once: repo Settings -> Pages -> Source: "GitHub Actions".
+
+name: Firmware and flasher site
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  firmware:
+    name: Firmware ${{ matrix.disp }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { disp: ili9341, num: 1, target: esp32 }
+          - { disp: st7796,  num: 2, target: esp32 }
+          - { disp: ili9486, num: 3, target: esp32 }
+          - { disp: gc9a01,  num: 4, target: esp32c3 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        # the whole repo goes in, firmware/ pulls ../core. git inside the container runs as
+        # root on files that aren't root's, hence the safe.directory line
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/project" -w /project/firmware --user root \
+            espressif/idf:release-v5.5 \
+            bash -c "git config --global --add safe.directory '*' && \
+                     idf.py --no-ccache -B build_${{ matrix.disp }} \
+                       -DSDKCONFIG=/project/firmware/build_${{ matrix.disp }}/sdkconfig \
+                       -DIDF_TARGET=${{ matrix.target }} -DRADAR_DISPLAY=${{ matrix.num }} build"
+
+      - name: Collect the binaries
+        # flash_args is written by the build: where each part goes
+        run: |
+          B=firmware/build_${{ matrix.disp }}
+          mkdir -p out/${{ matrix.disp }}
+          cp "$B/bootloader/bootloader.bin" "$B/partition_table/partition-table.bin" \
+             "$B/owlos-flight-radar.bin" "$B/flash_args" out/${{ matrix.disp }}/
+          ls -l out/${{ matrix.disp }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fw-${{ matrix.disp }}
+          path: out
+
+      # not for the site: the ELF turns a crash backtrace from a board flashed off the
+      # site into file and line. a locally built ELF doesn't match
+      - uses: actions/upload-artifact@v4
+        with:
+          name: elf-${{ matrix.disp }}
+          path: |
+            firmware/build_${{ matrix.disp }}/owlos-flight-radar.elf
+            firmware/build_${{ matrix.disp }}/sdkconfig
+          retention-days: 90
+
+  site:
+    name: Flasher site
+    needs: firmware
+    if: always()
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # for the build number
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: fw-*
+          path: public/fw
+          merge-multiple: true
+
+      - name: Put the page together
+        run: |
+          VERSION="build $(git rev-list --count HEAD) ($(git rev-parse --short HEAD))"
+          cp -r site/. public/
+          mkdir -p public/shots && cp -r shots/. public/shots/
+          bash .github/make-manifests.sh public/fw "$VERSION"
+          sed -i "s|@VERSION@|$VERSION|g" public/index.html
+          find public -type f | sort
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - id: deploy
+        uses: actions/deploy-pages@v4
