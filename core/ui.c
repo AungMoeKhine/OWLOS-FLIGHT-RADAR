@@ -51,6 +51,7 @@ void fr_cfg_defaults(fr_cfg_t *c)
     c->version = FR_CFG_VERSION;
     c->range = 50;
     c->map = 1;
+    c->ground = 1;
     c->lat = 48.8945f;                               // Trencin, Slovakia, until the site sends a home
     c->lon = 18.0444f;
     snprintf(c->place, sizeof c->place, "Trenčín");
@@ -357,6 +358,7 @@ int ui_init(ui_t *u, uint32_t now)
     u->now = u->boot = now;
     if (!scope_init()) return 0;
     fr_cfg_defaults(&u->cfg);
+    light_defaults(&u->light);
     /* default touch alignment of the 2.8" CYD (the WiFi radar's numbers) till the user aligns */
     u->cal = (touch_cal_t){ 0.0f, -0.0894f, 333.3f, -0.0666f, 0.0f, 251.1f };
     const int in = RADAR_ROUND ? (int)(GFX_W * 0.2f) : 30;   // round glass: the corners are not there, the diagonals are
@@ -488,6 +490,7 @@ static int hit_at(const ui_t *u, int x, int y)
     case VIEW_SETUP: return setup_hit(u, x, y);
     case VIEW_WIFI:  return wifi_hit(u, x, y);
     case VIEW_KEYS:  return keys_hit(u, x, y);
+    case VIEW_ABOUT: return about_hit(u, x, y);
     default:         return HIT_NONE;
     }
 }
@@ -500,6 +503,40 @@ static int repeats(const ui_t *u, int hit)
 static void select_plane(ui_t *u, int i)
 {
     u->sel = i >= 0 ? u->snap.p[i].icao : 0;
+}
+
+int watched(const ui_t *u, const plane_t *p)
+{
+    for (int i = 0; i < u->watch.n; i++) if (watch_is(&u->watch.w[i], p)) return 1;
+    return 0;
+}
+
+/* WATCH on the picked plane's panel: onto the watch list, or off it again. by its registration,
+ * else its address: the plane itself, whatever flight it flies next */
+static void watch_toggle(ui_t *u, const plane_t *p, ui_cmd_t *cmd)
+{
+    char id[WATCH_ID], text[WATCH_TEXT], said[40];
+    if (p->reg[0]) snprintf(id, sizeof id, "%s", p->reg);
+    else snprintf(id, sizeof id, "%06X", (unsigned)(p->icao & 0xFFFFFF));
+    int n = 0;
+    text[0] = 0;
+    for (int i = 0; i < u->watch.n; i++) {             // the list without it
+        if (watch_is(&u->watch.w[i], p)) continue;
+        n += snprintf(text + n, sizeof text - (size_t)n, "%s%s", n ? ", " : "", u->watch.w[i].id);
+    }
+    if (watched(u, p)) {
+        snprintf(said, sizeof said, "NOT WATCHED: %s", id);
+    } else if (u->watch.n >= WATCH_MAX) {
+        toast(u, "WATCH LIST FULL");
+        return;
+    } else {
+        snprintf(text + n, sizeof text - (size_t)n, "%s%s", n ? ", " : "", id);
+        snprintf(said, sizeof said, "WATCHING %s", id);
+    }
+    snprintf(u->watch_text, sizeof u->watch_text, "%s", text);
+    watch_set(&u->watch, text);                        // the button shows it at once, the firmware's copy next frame
+    cmd->watch = 1;
+    toast(u, said);
 }
 
 static void say_range(ui_t *u)
@@ -544,8 +581,10 @@ static void act(ui_t *u, int hit, int longp, int x, int y, ui_cmd_t *cmd)
     if (longp) return;
     if (u->view == VIEW_WIFI) { wifi_act(u, hit, cmd); return; }
     if (u->view == VIEW_KEYS) { keys_act(u, hit, cmd); return; }
+    if (u->view == VIEW_ABOUT) { about_act(u, hit); return; }
     if (u->view == VIEW_MAIN) {
         if (hit == HIT_WIFI) { wifi_open(u, cmd); return; }
+        if (hit == HIT_NEWS) { about_open(u); return; }
         if (hit == HIT_SCOPE) {
             int i = scope_pick(u, x, y);
 #if RADAR_ROUND
@@ -574,6 +613,9 @@ static void act(ui_t *u, int hit, int longp, int x, int y, ui_cmd_t *cmd)
         } else if (hit == HIT_BTN + 0) {
             next_theme(u, cmd);
             if (RADAR_ROUND) u->menu_until = u->now + ROUND_MENU_MS;   // stays up for the next colours
+        } else if (hit == HIT_BTN + 1 && u->sel && !RADAR_ROUND) {    // picked: WATCH (round: its row has no WATCH)
+            const plane_t *p = sel_plane(u);
+            if (p) watch_toggle(u, p, cmd);
         } else if (hit == HIT_BTN + 1) {
             u->menu_until = 0;
             u->view = VIEW_LIST;
@@ -638,7 +680,7 @@ void ui_touch(ui_t *u, int down, int x, int y, int rx, int ry, uint32_t now, ui_
             }
         } else if (u->t_moved && (u->view == VIEW_LIST || u->view == VIEW_SETUP || u->view == VIEW_WIFI)) {
             const int list = u->view == VIEW_LIST, wifi = u->view == VIEW_WIFI;
-            int rows = list ? u->n_order : wifi ? wifi_rows(u) : setup_rows();
+            int rows = list ? u->n_order : wifi ? wifi_rows(u) : setup_rows(u);
             int rh = list ? LIST_ROW : wifi ? NET_H : ROW_H;
             int y1 = list ? LIST_Y1 : BAR_Y - 3;
             int maxs = rows * rh - (y1 - LIST_Y0);
@@ -723,6 +765,7 @@ void ui_strip(ui_t *u, canvas_t *cv)
     case VIEW_CAL:   cal_draw(u, cv); break;
     case VIEW_WIFI:  wifi_draw(u, cv); break;
     case VIEW_KEYS:  keys_draw(u, cv); break;
+    case VIEW_ABOUT: about_draw(u, cv); break;
     default:         main_draw(u, cv); boot_banner(u, cv); break;
     }
     if ((int32_t)(u->toast_until - u->now) > 0) {

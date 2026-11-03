@@ -4,7 +4,7 @@
 #include "store.h"
 
 // how the board names itself to every server: OSM asks for a name it can tell apart
-#define NET_USER_AGENT "OWLOS-Flight-Radar/0.2 (+https://github.com/KirinDenis/OWLOS-FLIGHT-RADAR)"
+#define NET_USER_AGENT "OWLOS-Flight-Radar/" FLIGHT_VERSION " (+https://github.com/KirinDenis/OWLOS-FLIGHT-RADAR)"
 
 void net_start(const secrets_t *s);          // nothing happens without an SSID
 void net_reconnect(const secrets_t *s);      // new WiFi settings, from the site or the screen

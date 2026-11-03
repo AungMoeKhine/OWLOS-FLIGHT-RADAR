@@ -8,8 +8,11 @@
 #include "sky.h"
 #include "gfx.h"
 #include "map.h"
+#include "watch.h"
+#include "light.h"
 
-enum { VIEW_MAIN, VIEW_LIST, VIEW_SETUP, VIEW_CAL, VIEW_WIFI, VIEW_KEYS };   /* WIFI: the networks, KEYS: the password */
+enum { VIEW_MAIN, VIEW_LIST, VIEW_SETUP, VIEW_CAL, VIEW_WIFI, VIEW_KEYS, VIEW_ABOUT };   /* WIFI: the networks, KEYS: the password */
+enum { KB_PASS, KB_HOME, KB_WATCH };               /* what the keyboard types */
 #define UI_THEMES 5
 
 enum { SRC_FREE, SRC_FR24 };                       /* where the planes come from */
@@ -36,11 +39,13 @@ typedef struct {
     char     place[40];    /* home's town and */
     char     country[32];  /* its country: from the site, or the board asks OpenStreetMap */
     float    range;        /* radius of the scope in the distance unit: zoomed by a finger, any value */
+    uint8_t  ground;       /* 1: planes on the ground shown, 0: left out (a home next to an airport) */
 } fr_cfg_t;
 
-#define FR_CFG_VERSION 3
+#define FR_CFG_VERSION 4
 void fr_cfg_defaults(fr_cfg_t *c);
 float range_km(const fr_cfg_t *c);                 /* the radius of the scope */
+float unit_km(int dist_unit);                      /* km in one of DIST_* */
 
 /* a network the board heard when it looked round */
 typedef struct {
@@ -79,6 +84,10 @@ typedef struct {
     uint8_t refetch;       /* range, source or home changed: ask the server now */
     uint8_t scan;          /* the WiFi page opened: look for networks */
     uint8_t wifi;          /* join ui_t.wifi_ssid with ui_t.wifi_pass, then wipe the password */
+    uint8_t home;          /* a new home: ui_t.home_text is a town, a postcode or "lat lon" */
+    uint8_t watch;         /* a new watch list: ui_t.watch_text */
+    uint8_t light;         /* ui_t.light changed: use it, keep it */
+    uint8_t light_test;    /* the LED's red, green, blue */
 } ui_cmd_t;
 
 #define TRAIL_GAP INT16_MIN       /* a trail point off the scope: the trail breaks there */
@@ -104,6 +113,7 @@ typedef struct {
     int      n_order;
     float    beam;         /* the sweep, degrees */
     int      list_scroll, setup_scroll;
+    int      setup_tab;    /* SET's tab: how it looks, what it shows and where from, the LED */
     /* touch */
     int      t_down, t_x0, t_y0, t_x, t_y, t_moved, t_long, t_ns, t_hit, t_reps, t_rpt, t_scroll0;
     uint32_t t_since, t_rep;
@@ -122,10 +132,17 @@ typedef struct {
     char     toast[40];
     uint32_t menu_until;   /* round glass: the HUE LIST SET row shows till then */
     uint8_t  panel_open;   /* the square map: the panel slid in over it (the three dots) */
-    /* the WiFi page and its keyboard */
+    /* the WiFi page and its keyboard. the keyboard types the home and the watch list too */
     int      wifi_scroll;
     char     wifi_ssid[33];
     char     wifi_pass[65];    /* while it is typed. ui_cmd_t.wifi hands it over */
+    char     home_text[64];    /* a town, a postcode or "lat lon". ui_cmd_t.home hands it over */
+    char     watch_text[WATCH_TEXT];   /* the watch list being typed. ui_cmd_t.watch hands it over */
+    uint8_t  kb_mode;          /* KB_PASS, KB_HOME, KB_WATCH: what the keyboard types */
+    watchlist_t watch;         /* the firmware's list, copied in like net: for SET */
+    light_cfg_t light;         /* what lights the LED on the back (core/light.h), SET's LED rows */
+    char     newest[12];       /* the version the site has, "": not heard yet. the firmware copies it in like net */
+    int      about_back;       /* the view ABOUT goes back to */
     uint8_t  kb_page;          /* 0 small letters, 1 capitals, 2 signs */
     uint8_t  kb_show;          /* the password in clear, not dots */
     uint32_t kb_typed;         /* when the last letter came: it shows a moment before it turns to a dot */
@@ -157,4 +174,8 @@ float ui_ground_kpx(const fr_cfg_t *c);
 extern const char *ui_screen_name;
 /* a microsecond clock for prof[], set by the firmware. NULL: nothing is timed */
 extern uint32_t (*ui_clock_us)(void);
+/* this firmware's version, the first "## " line of CHANGES.md, set by the firmware. NULL: none */
+extern const char *ui_version;
+int ui_version_cmp(const char *a, const char *b);   /* <0 a is older, 0 the same, >0 newer: 0.9 < 0.10 */
+int ui_update(const ui_t *u);                       /* the site has a newer one than this */
 #define UI_SCREEN_PICK_MS 8000u            /* BOOT picks the screen this long after power on */

@@ -160,6 +160,7 @@ int main(int argc, char **argv)
     crc_init();
     ui_init(&ui, 0);
     ui_screen_name = "ILI9341 V2";                  // the 2.8" CYD offers its other screens; a new one starts as v2
+    ui_version = FLIGHT_VERSION;                     // CHANGES.md's, BUILD.BAT passes it
     sky_init(&sky, HOME_LAT, HOME_LON);
     demo_init(&demo, range_km(&ui.cfg), 82);
     ui.net.demo = 1;
@@ -303,7 +304,15 @@ int main(int argc, char **argv)
     drag(120, 180, 120, 40);
     drag(120, 180, 120, 40);
     shot("11-setup-more");
-    press_bar(0, 1);
+    const int tabs = RADAR_HAS_LED ? 3 : 2;          // the bar: VIEW DATA (LED) BACK
+    press_bar(1, tabs + 1);
+    shot("10-setup-data");
+#if RADAR_HAS_LED
+    press_bar(2, tabs + 1);
+    shot("10-setup-led");
+#endif
+    press_bar(0, tabs + 1);                          // VIEW again, as it was
+    press_bar(tabs, tabs + 1);                       // BACK
 
     ui.net.wifi = 0;
     shot("12-no-wifi");
@@ -344,6 +353,24 @@ int main(int argc, char **argv)
         press_bar(1, 2);                             // BACK
         ui.net.n_aps = 0;
         ui.net.scan = SCAN_NONE;
+
+        // SET, HOME: the same keyboard for a new home, a town typed
+        home_open(&ui);
+        static const int TOWN[][2] = { { 3, 0 }, { 1, 4 }, { 1, 3 }, { 1, 2 }, { 3, 6 }, { 3, 3 }, { 1, 7 }, { 3, 6 } };   // shift T r e n c i n
+        for (int k = 0; k < 8; k++) tap(TOWN[k][1] * KB_CW + KB_CW / 2, KB_Y0 + TOWN[k][0] * KB_RH + KB_RH / 2);
+        printf("home typed: %s\n", ui.home_text);
+        shot("36-home");
+        press_bar(0, 2);                             // CANCEL: back to SET
+        press_bar(tabs, tabs + 1);                   // BACK
+
+        // SET, WATCH: the planes to follow, on the same keyboard
+        watch_set(&ui.watch, "EZY12AB");
+        watch_open(&ui);
+        snprintf(ui.watch_text, sizeof ui.watch_text, "EZY12AB, G-EUPT, 4CA7B4");   // as if typed
+        shot("37-watch");
+        press_bar(0, 2);                             // CANCEL
+        press_bar(tabs, tabs + 1);                   // BACK
+        watch_set(&ui.watch, "");
     }
 #endif
     ui.net.demo = 0;
@@ -356,6 +383,32 @@ int main(int argc, char **argv)
         shot(n);
     }
     ui_set_theme(&ui, 0);
+
+    // ABOUT: this version, the newest; then the site has a newer one, the note says so, a tap opens it
+    snprintf(ui.newest, sizeof ui.newest, "%s", ui_version);
+    about_open(&ui);
+    shot("38-about");
+    press_bar(0, 1);                                 // BACK
+    {
+        const char *dot = strrchr(ui_version, '.');  // the next one: the last number up by one
+        int head = dot ? (int)(dot - ui_version) + 1 : 0;
+        snprintf(ui.newest, sizeof ui.newest, "%.*s%d", head, ui_version, atoi(ui_version + head) + 1);
+    }
+    fly(2);
+    shot("40-new-version");
+    note_box_t nb;
+    if (update_note_box(&ui, &nb)) tap(nb.x + nb.w / 2, nb.y + nb.h / 2);
+    printf("the note %s: %s\n", ui.newest, ui.view == VIEW_ABOUT ? "ABOUT" : "missed");
+    shot("39-about-new");
+    press_bar(0, 1);                                 // BACK
+#if !RADAR_ROUND
+    ui.cfg.look = LOOK_MAP;                          // over the square map: a card under the town's
+    fly(2);
+    shot("41-new-version-map");
+    ui.cfg.look = LOOK_RADAR;
+#endif
+    ui.newest[0] = 0;
+
     ui_start_calibration(&ui);
     shot("13-touch-align");
     printf("sky: %d planes, %d in the last answer\n", sky.n, sky.total);

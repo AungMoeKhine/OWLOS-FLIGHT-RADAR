@@ -53,10 +53,14 @@ typedef struct {
     int      status;
     char     note[48];           /* what went wrong, for the screen */
     int      total;              /* how many the last answer had, before the cap */
+    uint8_t  hide_ground;        /* planes on the ground left out, sky_hide_ground */
 } sky_t;
 
 void sky_init(sky_t *s, float lat, float lon);
 void sky_home(sky_t *s, float lat, float lon);    /* moves home, positions recalculated */
+/* planes on the ground left out or not. left out, the ones there go at once, and in the answers
+ * they take none of the SKY_MAX places: next to a busy airport they would take most of them */
+void sky_hide_ground(sky_t *s, int hide);
 
 /* an answer read as it arrives. a busy sky is 100 planes, a kilobyte each: more than the board
  * has free. so one plane's object is held at a time and only the nearest SKY_MAX are kept;
@@ -66,6 +70,7 @@ void sky_home(sky_t *s, float lat, float lon);    /* moves home, positions recal
 typedef struct {
     int      fr24;
     float    home_lat, home_lon;
+    int      hide_ground;
     uint32_t now;
     int      state;              /* 0 looking for the list, 1 in it, 2 past it */
     int      depth, in_str, esc, keyn;

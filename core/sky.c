@@ -31,6 +31,24 @@ static void place(const sky_t *s, plane_t *p)
     p->brg = b < 0 ? b + 360.0f : b;
 }
 
+// parked, taxiing, or a car of the airport's own
+static int on_ground(const plane_t *p) { return p->ground || p->kind == KIND_GROUND; }
+
+static void drop(sky_t *s, uint32_t icao)
+{
+    for (int i = 0; i < s->n; i++) if (s->p[i].icao == icao) { s->p[i] = s->p[--s->n]; return; }
+}
+
+void sky_hide_ground(sky_t *s, int hide)
+{
+    s->hide_ground = (uint8_t)(hide != 0);
+    if (!hide) return;
+    for (int i = 0; i < s->n;) {
+        if (on_ground(&s->p[i])) s->p[i] = s->p[--s->n];
+        else i++;
+    }
+}
+
 void sky_home(sky_t *s, float lat, float lon)
 {
     s->home_lat = lat;
@@ -316,6 +334,9 @@ static void keep(sky_reader_t *r, const plane_t *p)
     float x, y;
     geo_offset(r->home_lat, r->home_lon, p->lat, p->lon, &x, &y);
     float d = x * x + y * y;
+    // one on the ground left out is kept only to say it has landed: every plane in the air goes
+    // before it. 1e9 km squared is further than anywhere on Earth
+    if (r->hide_ground && on_ground(p)) d += 1e9f;
     int at = r->n;
     if (r->n == SKY_MAX) {                             // full: it takes the farthest one's place
         at = 0;
@@ -336,6 +357,7 @@ void sky_read_begin(sky_reader_t *r, const sky_t *s, int fr24, uint32_t now)
     r->fr24 = fr24;
     r->home_lat = s->home_lat;
     r->home_lon = s->home_lon;
+    r->hide_ground = s->hide_ground;
     r->now = now;
 }
 
@@ -389,7 +411,10 @@ void sky_read(sky_reader_t *r, const char *data, int len)
 int sky_read_end(sky_reader_t *r, sky_t *s)
 {
     if (!r->state) return -1;
-    for (int i = 0; i < r->n; i++) merge(s, &r->got[i], r->now);
+    for (int i = 0; i < r->n; i++) {
+        if (r->hide_ground && on_ground(&r->got[i])) drop(s, r->got[i].icao);   // landed: gone now, not SKY_FORGET later
+        else merge(s, &r->got[i], r->now);
+    }
     s->total = r->total;                               // cut short: what was read stays
     s->updated = r->now;
     s->status = SKY_OK;

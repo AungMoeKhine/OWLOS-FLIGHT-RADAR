@@ -92,12 +92,13 @@ extern const theme_t *TH;
 enum {
     HIT_NONE, HIT_SCOPE, HIT_ROWNEAR, HIT_PANEL, HIT_LOOK, HIT_DOTS,
     HIT_WIFI,                      /* the demo card's SET UP WIFI */
+    HIT_NEWS,                      /* the note that the site has a newer version: ABOUT */
     HIT_BTN = 10,                  /* + panel button index */
     HIT_BAR = 20,                  /* + bottom bar button index */
     HIT_ROW = 40,                  /* + list row */
-    HIT_SDEC = 100, HIT_SINC = 140, HIT_SBTN = 180,  /* setup rows */
-    HIT_NET = 200,                 /* + a network on the WiFi page */
-    HIT_KEY = 220                  /* + a key of the keyboard */
+    HIT_SDEC = 100, HIT_SINC = 140, HIT_SBTN = 180,  /* setup rows: 40 at most */
+    HIT_NET = 220,                 /* + a network on the WiFi page */
+    HIT_KEY = 240                  /* + a key of the keyboard */
 };
 
 /* the WiFi page with its keyboard: square screens with touch. the round glass is too small for
@@ -112,7 +113,6 @@ static inline float wrap360(float a) { a = fmodf(a, 360.0f); return a < 0 ? a + 
  * them, BOOT jumps through the short list */
 float range_snap(float v);
 float range_step(float v, int dir);
-float unit_km(int dist_unit);                      /* km in one of DIST_* */
 extern const char *const SERVER_NAME[FREE_SERVERS];
 extern const char *const LOOK_NAME[LOOKS];
 /* the flat looks on a square screen: a map over the whole left side, north up, no compass round
@@ -152,6 +152,7 @@ void draw_background(canvas_t *cv, int grid);     /* grid 0: just the gradient, 
 void toast(ui_t *u, const char *s);
 int  in_box(int x, int y, int bx, int by, int bw, int bh);
 const plane_t *sel_plane(const ui_t *u);
+int watched(const ui_t *u, const plane_t *p);         /* on the watch list */
 uint32_t alt_colour(const ui_t *u, const plane_t *p);
 void fmt_alt(const ui_t *u, const plane_t *p, char *buf, int sz, int short_form);
 void fmt_dist(const ui_t *u, float km, char *buf, int sz);
@@ -183,7 +184,7 @@ void list_draw(ui_t *u, canvas_t *cv);
 int  list_hit(const ui_t *u, int x, int y);
 void setup_draw(ui_t *u, canvas_t *cv);
 int  setup_hit(const ui_t *u, int x, int y);
-int  setup_rows(void);
+int  setup_rows(const ui_t *u);                      /* in the tab shown */
 int  setup_repeats(int hit);
 void setup_act(ui_t *u, int hit, int longp, ui_cmd_t *cmd);
 void cal_draw(ui_t *u, canvas_t *cv);
@@ -194,6 +195,8 @@ void wifi_draw(ui_t *u, canvas_t *cv);
 int  wifi_hit(const ui_t *u, int x, int y);
 int  wifi_rows(const ui_t *u);
 void wifi_act(ui_t *u, int hit, ui_cmd_t *cmd);
+void home_open(ui_t *u);                             /* the keyboard, for a new home */
+void watch_open(ui_t *u);                            /* the keyboard, for the watch list */
 void keys_draw(ui_t *u, canvas_t *cv);
 int  keys_hit(const ui_t *u, int x, int y);
 int  keys_repeats(const ui_t *u, int hit);           /* the key that rubs out goes on while held */
@@ -207,6 +210,16 @@ typedef struct { int x, y, w, h, bx, by, bw, bh, sc; } demo_box_t;
 demo_box_t demo_box(const ui_t *u);
 #endif
 void keys_act(ui_t *u, int hit, ui_cmd_t *cmd);
+
+/* ABOUT and the note on the main screen that the site has a newer version (ui_about.c) */
+void about_open(ui_t *u);                            /* from the view shown, BACK goes back there */
+void about_draw(ui_t *u, canvas_t *cv);
+int  about_hit(const ui_t *u, int x, int y);
+void about_act(ui_t *u, int hit);
+typedef struct { int x, y, w, h; } note_box_t;
+int  update_note_box(const ui_t *u, note_box_t *b);  /* where the note is now, 0: not shown */
+void update_note(ui_t *u, canvas_t *cv);             /* the square looks and the round glass: a card */
+void update_text(const ui_t *u, char *buf, int sz);  /* NEW VERSION 0.4 */
 
 #define CAL_POINTS 5
 extern int CAL_PT[CAL_POINTS][2];

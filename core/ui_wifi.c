@@ -97,8 +97,31 @@ void wifi_act(ui_t *u, int hit, ui_cmd_t *cmd)
         return;
     }
     u->view = VIEW_KEYS;
+    u->kb_mode = KB_PASS;
     u->kb_page = 0;
     u->kb_show = 0;
+    u->kb_typed = 0;
+}
+
+/* the same keyboard for a new home: a town, a postcode, or the point as "lat lon". the firmware
+ * asks OpenStreetMap's Nominatim where a name is; a point needs no WiFi */
+void home_open(ui_t *u)
+{
+    memset(u->home_text, 0, sizeof u->home_text);
+    u->view = VIEW_KEYS;
+    u->kb_mode = KB_HOME;
+    u->kb_page = 0;
+    u->kb_typed = 0;
+}
+
+/* and for the watch list: what is on it now, to change. letters come out as capitals, the way
+ * callsigns and registrations are written */
+void watch_open(ui_t *u)
+{
+    watch_text(&u->watch, u->watch_text, sizeof u->watch_text);
+    u->view = VIEW_KEYS;
+    u->kb_mode = KB_WATCH;
+    u->kb_page = 0;
     u->kb_typed = 0;
 }
 
@@ -115,6 +138,15 @@ static const char KEYS[3][4][11] = {
 
 #define FIELD_Y (HEAD_H + (GFX_H >= 320 ? 18 : 15))
 #define FIELD_H (KB_Y0 - 5 - FIELD_Y)
+
+// what the keys type into: the password, the home or the watch list
+static char *typed(ui_t *u, int *cap)
+{
+    if (u->kb_mode == KB_HOME) { *cap = (int)sizeof u->home_text; return u->home_text; }
+    if (u->kb_mode == KB_WATCH) { *cap = (int)sizeof u->watch_text; return u->watch_text; }
+    *cap = (int)sizeof u->wifi_pass;
+    return u->wifi_pass;
+}
 
 static int key_code(const ui_t *u, int cell)
 {
@@ -133,7 +165,7 @@ static void key_span(const ui_t *u, int cell, int *a, int *b)
 
 int keys_hit(const ui_t *u, int x, int y)
 {
-    int b = bar_hit(x, y, 3);
+    int b = bar_hit(x, y, u->kb_mode == KB_PASS ? 3 : 2);
     if (b >= 0) return HIT_BAR + b;
     if (y < KB_Y0 || y >= KB_Y0 + 4 * KB_RH) return HIT_NONE;
     int col = x / KB_CW, row = (y - KB_Y0) / KB_RH;
@@ -159,17 +191,22 @@ static const char *key_name(const ui_t *u, int c)
     }
 }
 
-// the password field: dots, the last letter a moment in clear; or all of it in clear
+// the password field: dots, the last letter a moment in clear; or all of it in clear. the home
+// and the watch list are always in clear
 static void field(ui_t *u, canvas_t *cv)
 {
     const int x = 6, w = GFX_W - 12, y = FIELD_Y, h = FIELD_H;
     if (!gfx_touches(cv, y - 12, y + h)) return;
-    font_text_clip(cv, &FONT_SMALL, x + 2, y - 12, u->wifi_ssid, C_DIM, 235, w - 4);
+    const char *above = u->kb_mode == KB_HOME ? "a town, a postcode, or lat lon: 48.9 18.1" :
+                        u->kb_mode == KB_WATCH ? "callsigns, registrations, hex: EZY12AB, G-EUPT" : u->wifi_ssid;
+    font_text_clip(cv, &FONT_SMALL, x + 2, y - 12, above, C_DIM, 235, w - 4);
     chamfer_box(cv, x, y, w, h, C_BG0, 200, C_PRIM, 220);
-    const int n = (int)strlen(u->wifi_pass), room = w - 20, ty = y + (h - FONT_MEDIUM.line_h) / 2;
+    int cap;
+    const char *text = typed(u, &cap);
+    const int n = (int)strlen(text), room = w - 20, ty = y + (h - FONT_MEDIUM.line_h) / 2;
     int px = x + 8;
-    if (u->kb_show) {
-        const char *s = u->wifi_pass;
+    if (u->kb_show || u->kb_mode != KB_PASS) {
+        const char *s = text;
         while (*s && font_width(&FONT_MEDIUM, s) > room) s++;   // the end of it, where the typing is
         px += font_text(cv, &FONT_MEDIUM, px, ty, s, C_FOCUS, 255);
     } else {
@@ -187,12 +224,14 @@ static void field(ui_t *u, canvas_t *cv)
         }
     }
     if ((u->now / 500u) & 1) gfx_vline(cv, px + 1, y + 5, y + h - 6, C_FOCUS, 230);   // where the next letter goes
-    if (!n) micro_text(cv, x + w - 8 - micro_width("PASSWORD", 1), y + (h - 5) / 2, "PASSWORD", C_QUIET, 220, 1);
+    static const char *const HINT[3] = { "PASSWORD", "HOME", "NONE: NOTHING WATCHED" };
+    if (!n) micro_text(cv, x + w - 8 - micro_width(HINT[u->kb_mode], 1), y + (h - 5) / 2, HINT[u->kb_mode], C_QUIET, 220, 1);
 }
 
 void keys_draw(ui_t *u, canvas_t *cv)
 {
-    page_header(cv, "WIFI PASSWORD", NULL, C_FOCUS);
+    static const char *const HEAD[3] = { "WIFI PASSWORD", "HOME", "WATCH" };
+    page_header(cv, HEAD[u->kb_mode], NULL, C_FOCUS);
     field(u, cv);
     for (int row = 0; row < 4; row++) {
         int y = KB_Y0 + row * KB_RH;
@@ -216,13 +255,42 @@ void keys_draw(ui_t *u, canvas_t *cv)
             }
         }
     }
+    if (u->kb_mode == KB_HOME) {
+        static const char *const H[2] = { "CANCEL", "FIND" };
+        bar(u, cv, H, 2, u->home_text[0] ? 1 : -1);
+        return;
+    }
+    if (u->kb_mode == KB_WATCH) {
+        static const char *const W[2] = { "CANCEL", "SAVE" };
+        bar(u, cv, W, 2, 1);
+        return;
+    }
     const char *L[3] = { u->kb_show ? "HIDE" : "SHOW", "CANCEL", "JOIN" };
     bar(u, cv, L, 3, u->wifi_pass[0] ? 2 : -1);
 }
 
+// the two keys under the keyboard for the home and the watch list. 1: it was one of them
+static int text_bar(ui_t *u, int hit, ui_cmd_t *cmd)
+{
+    if (hit == HIT_BAR + 0) { u->view = VIEW_SETUP; return 1; }
+    if (hit != HIT_BAR + 1) return 0;
+    if (u->kb_mode == KB_WATCH) {                      // empty is fine: nothing watched
+        cmd->watch = 1;
+        u->view = VIEW_SETUP;
+        toast(u, u->watch_text[0] ? "WATCH LIST SAVED" : "NOTHING WATCHED");
+        return 1;
+    }
+    if (!u->home_text[0]) { toast(u, "TYPE A TOWN, OR LAT LON"); return 1; }
+    cmd->home = 1;                                     // the firmware says what it found
+    u->view = VIEW_SETUP;
+    toast(u, "LOOKING FOR IT");
+    return 1;
+}
+
 void keys_act(ui_t *u, int hit, ui_cmd_t *cmd)
 {
-    if (hit == HIT_BAR + 0) { u->kb_show ^= 1; return; }
+    if (u->kb_mode != KB_PASS && text_bar(u, hit, cmd)) return;
+    if (u->kb_mode == KB_PASS && hit == HIT_BAR + 0) { u->kb_show ^= 1; return; }
     if (hit == HIT_BAR + 1) {                          // back to the networks, the letters forgotten
         memset(u->wifi_pass, 0, sizeof u->wifi_pass);
         u->view = VIEW_WIFI;
@@ -236,16 +304,19 @@ void keys_act(ui_t *u, int hit, ui_cmd_t *cmd)
         return;
     }
     if (hit < HIT_KEY || hit >= HIT_KEY + 40) return;
-    int c = key_code(u, hit - HIT_KEY), n = (int)strlen(u->wifi_pass);
+    int cap;
+    char *t = typed(u, &cap);
+    int c = key_code(u, hit - HIT_KEY), n = (int)strlen(t);
     switch (c) {
     case K_SHIFT:   u->kb_page = u->kb_page == 1 ? 0 : 1; break;
     case K_SIGNS:   u->kb_page = 2; break;
     case K_LETTERS: u->kb_page = 0; break;
-    case K_RUB:     if (n) u->wifi_pass[n - 1] = 0; u->kb_typed = 0; break;
+    case K_RUB:     if (n) t[n - 1] = 0; u->kb_typed = 0; break;
     default:
-        if (n >= (int)sizeof u->wifi_pass - 1) return;
-        u->wifi_pass[n] = (char)c;
-        u->wifi_pass[n + 1] = 0;
+        if (n >= cap - 1) return;
+        if (u->kb_mode == KB_WATCH && c >= 'a' && c <= 'z') c -= 32;   // EZY12AB, G-EUPT: capitals
+        t[n] = (char)c;
+        t[n + 1] = 0;
         u->kb_typed = u->now;
         if (u->kb_page == 1) u->kb_page = 0;           // a capital, then small letters again
         break;

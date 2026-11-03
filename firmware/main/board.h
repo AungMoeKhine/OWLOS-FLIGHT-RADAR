@@ -143,6 +143,16 @@
 #ifndef PIN_LCD_BL
 #define PIN_LCD_BL (-1)
 #endif
+
+/* the RGB LED on the back of the 2.8" and the 3.5" CYD, each colour pulled to ground = lit. the same
+ * pins on both (rzeldent/platformio-espressif32-sunton); on the 2.8" the Thermo Relay drives them.
+ * red is GPIO 4 there and GPIO 22 on LCDWIKI's ESP32-32E boards (lcdwiki.com, E32R28T, E32R35T),
+ * whose GPIO 4 switches the speaker's amplifier: the user picks, core/light.h LIGHT_RED_.
+ * the 3.5" here is one of those (2026-11-03: red lit on 22 alone) */
+#if RADAR_HAS_LED
+#define PIN_LED_G     16
+#define PIN_LED_B     17
+#endif
 #ifndef DISP_HELPER
 #define DISP_HELPER 0
 #endif

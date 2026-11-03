@@ -1,4 +1,5 @@
 #include "store.h"
+#include <stddef.h>
 #include <string.h>
 #include "nvs.h"
 
@@ -44,6 +45,15 @@ int store_load_cfg(fr_cfg_t *c)
 {
     fr_cfg_t t;
     if (load_blob(NS, "cfg", &t, sizeof t) && t.version == FR_CFG_VERSION) {
+        *c = t;
+        return 1;
+    }
+    /* version 3 is this one up to `ground`: its 100 bytes are read over the defaults, and a board
+     * that ran it keeps all of its settings */
+    _Static_assert(offsetof(fr_cfg_t, ground) == 100, "version 3 settings are the first 100 bytes");
+    fr_cfg_defaults(&t);
+    if (load_blob(NS, "cfg", &t, offsetof(fr_cfg_t, ground)) && t.version == 3) {
+        t.version = FR_CFG_VERSION;
         *c = t;
         return 1;
     }
@@ -121,6 +131,40 @@ void store_save_screen(int profile)
     nvs_commit(h);
     nvs_close(h);
 }
+
+void store_load_watch(char *text, int cap)
+{
+    text[0] = 0;
+    nvs_handle_t h;
+    if (nvs_open(NS, NVS_READONLY, &h) != ESP_OK) return;
+    load_str(h, "watch", text, (size_t)cap);
+    nvs_close(h);
+}
+
+void store_save_watch(const char *text)
+{
+    nvs_handle_t h;
+    if (nvs_open(NS, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_str(h, "watch", text);
+    nvs_commit(h);
+    nvs_close(h);
+}
+
+void store_load_light(light_cfg_t *c)
+{
+    if (load_blob(NS, "light", c, sizeof *c) && c->version == LIGHT_CFG_VERSION) return;
+    /* version 2 is this one up to `red`: read over the defaults, the red one stays on GPIO 4 */
+    _Static_assert(offsetof(light_cfg_t, red) == 10, "version 2 LED settings are the first 10 bytes");
+    light_defaults(c);
+    if (load_blob(NS, "light", c, offsetof(light_cfg_t, red)) && c->version == 2) {
+        c->version = LIGHT_CFG_VERSION;
+        c->red = LIGHT_RED_4;
+        return;
+    }
+    light_defaults(c);
+}
+
+void store_save_light(const light_cfg_t *c) { save_blob("light", c, sizeof *c); }
 
 uint32_t store_load_ran(void)
 {

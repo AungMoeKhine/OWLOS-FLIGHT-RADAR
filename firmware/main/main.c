@@ -14,9 +14,12 @@
 #include "console.h"
 #include "demo.h"
 #include "display.h"
+#include "font.h"
 #include "gfx.h"
+#include "led.h"
 #include "net.h"
 #include "map.h"
+#include "qr_site.h"
 #include "sky.h"
 #include "store.h"
 #include "tiles.h"
@@ -33,7 +36,7 @@
 #include "freertos/task.h"
 #include "nvs_flash.h"
 
-#define FLIGHT_VERSION "0.2"
+// FLIGHT_VERSION comes from CHANGES.md (firmware/CMakeLists.txt)
 #define DEMO_BYTES     6144            /* the demo's answer: 12 planes */
 #define FREE_EVERY_MS  5000u           /* the free networks allow a request a second */
 #define FR24_EVERY_MS  20000u          /* FR24 counts credits: slower */
@@ -54,6 +57,18 @@ static uint32_t          s_fetched;
 static volatile uint32_t s_wifi_try;   // when WiFi settings last came, from the site or the screen
 static volatile int      s_demo_on;    // the demo sky is up: no WiFi set, or the one set is not there
 static volatile int      s_screen = -1, s_screen_set = -1;   // the 2.8" CYD's screen revision: now, and what the site asks
+static char              s_home_ask[64];   // a home typed on the screen, for the fetch task to find. "": none
+static char              s_said[40];       // what the fetch task tells the screen: a home found, a watched plane
+static uint32_t          s_said_ms;        // for how long
+static volatile int      s_said_new;
+static watchlist_t       s_watch;          // the planes to follow (core/watch.h), under s_lock
+static volatile uint32_t s_watch_pick;     // one of them just came in range: the screen picks it
+static uint32_t          s_watch_asked;    // ms of the last lookup of one, 0: ask now
+static light_t           s_light;          // what happened, for the LED (core/light.h), under s_lock
+static light_cfg_t       s_light_cfg;      // what lights it: the screen's and the site's, under s_lock
+static volatile int      s_light_new;      // the site sent LED settings: the screen takes them
+static volatile int      s_light_test;     // the site asked for the LED's red, green, blue
+static char              s_newest[12];     // the version the site has (update_check), "": not heard. under s_lock
 
 /* how the last run ended, for a board found standing still: did it start again (and why), or
  * did the picture stop with the board running? the uptime goes to NVS once a minute (store.h):
@@ -182,6 +197,10 @@ static void map_service(const fr_cfg_t *c)
 
 typedef struct { char *b; int n, cap; } text_t;
 
+/* Nominatim's question and answer, for geocode() and the home search: both run on the fetch task,
+ * one at a time. the ESP32's RAM is short, one pair is kept */
+static char s_osm_url[420], s_osm[2048];
+
 static void to_text(void *ctx, const char *data, int len)
 {
     text_t *t = ctx;
@@ -190,6 +209,9 @@ static void to_text(void *ctx, const char *data, int len)
     t->n += len;
     t->b[t->n] = 0;
 }
+
+// the most a place can be called, from a city down to a county: the first one there
+static const char *const PLACE_KIND[] = { "city", "town", "village", "municipality", "hamlet", "county", "state" };
 
 static void geocode(void)
 {
@@ -201,17 +223,15 @@ static void geocode(void)
     if ((c.place[0] && c.country[0]) || !net_up() || (c.lat == asked_lat && c.lon == asked_lon)) return;
     asked_lat = c.lat;
     asked_lon = c.lon;
-    static char url[160], buf[2048];
-    snprintf(url, sizeof url, "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=en&lat=%.2f&lon=%.2f",
+    snprintf(s_osm_url, sizeof s_osm_url, "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=en&lat=%.2f&lon=%.2f",
              (double)vague(c.lat), (double)vague(c.lon));
-    text_t t = { buf, 0, sizeof buf };
-    buf[0] = 0;
+    const char *buf = s_osm;
+    text_t t = { s_osm, 0, sizeof s_osm };
+    s_osm[0] = 0;
     int status = 0;
-    net_get(url, NULL, to_text, &t, &status);
-    // the most a place can be called, from a city down to a county: the first one there
-    static const char *const KIND[] = { "city", "town", "village", "municipality", "hamlet", "county", "state" };
+    net_get(s_osm_url, NULL, to_text, &t, &status);
     char place[sizeof c.place] = "", country[sizeof c.country] = "";
-    for (int i = 0; i < (int)(sizeof KIND / sizeof KIND[0]) && !place[0]; i++) json_str(buf, KIND[i], place, sizeof place);
+    for (int i = 0; i < (int)(sizeof PLACE_KIND / sizeof PLACE_KIND[0]) && !place[0]; i++) json_str(buf, PLACE_KIND[i], place, sizeof place);
     json_str(buf, "country", country, sizeof country);
     ESP_LOGI(TAG, "where home is: HTTP %d, \"%s\", \"%s\"", status, place, country);
     if (status != 200 || (!place[0] && !country[0])) return;
@@ -228,6 +248,232 @@ static void geocode(void)
     if (same) store_save_cfg(&c);
 }
 
+/* --- a home typed on the screen. "48.9 18.1" is taken as it is, no WiFi needed. a name or a
+ * postcode is asked of Nominatim's search, and its first answer taken: a town's centre --- */
+
+// "48.9 18.1" or "48.9, 18.1": a point, 1. a postcode or a name: 0
+static int as_point(const char *s, float *lat, float *lon)
+{
+    char *end;
+    double a = strtod(s, &end);
+    if (end == s) return 0;
+    while (*end == ' ' || *end == ',') end++;
+    const char *at = end;
+    double b = strtod(at, &end);
+    if (end == at) return 0;
+    while (*end == ' ') end++;
+    if (*end || a < -90 || a > 90 || b < -180 || b > 180) return 0;
+    *lat = (float)a;
+    *lon = (float)b;
+    return 1;
+}
+
+// the words for a URL: letters and digits as they are, the rest as %XX
+static void url_words(const char *s, char *out, int cap)
+{
+    static const char HEX[] = "0123456789ABCDEF";
+    int n = 0;
+    for (; *s && n < cap - 4; s++) {
+        unsigned char ch = (unsigned char)*s;
+        if ((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch == '-' || ch == '.') {
+            out[n++] = (char)ch;
+        } else {
+            out[n++] = '%';
+            out[n++] = HEX[ch >> 4];
+            out[n++] = HEX[ch & 15];
+        }
+    }
+    out[n] = 0;
+}
+
+// the new home, as the site's SET makes it. no place: geocode() asks OSM for its name
+static void home_set(float lat, float lon, const char *place, const char *country)
+{
+    fr_cfg_t c;
+    lock();
+    s_cfg.lat = lat;
+    s_cfg.lon = lon;
+    snprintf(s_cfg.place, sizeof s_cfg.place, "%s", place);
+    snprintf(s_cfg.country, sizeof s_cfg.country, "%s", country);
+    sky_home(&s_sky, lat, lon);
+    c = s_cfg;
+    s_cfg_new = 1;
+    unlock();
+    store_save_cfg(&c);
+}
+
+/* a line for the screen's toast, s_lock held. wider than the screen: the shorter one, the rest
+ * is on SET */
+static void say_locked(const char *text, const char *shorter, uint32_t ms)
+{
+    if (snprintf(s_said, sizeof s_said, "%s", text) >= (int)sizeof s_said || font_width(&FONT_MEDIUM, s_said) > GFX_W - 24) {
+        snprintf(s_said, sizeof s_said, "%s", shorter);
+    }
+    s_said_ms = ms;
+    s_said_new = 1;
+}
+
+static void home_say(const char *text)
+{
+    lock();
+    say_locked(text, "HOME FOUND", 4000u);
+    unlock();
+}
+
+// one search of Nominatim: its first answer into s_osm, the HTTP status back
+static int search(const char *q)
+{
+    int n = snprintf(s_osm_url, sizeof s_osm_url,
+                     "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1&accept-language=en&q=");
+    url_words(q, s_osm_url + n, (int)sizeof s_osm_url - n);
+    text_t t = { s_osm, 0, sizeof s_osm };
+    s_osm[0] = 0;
+    int status = 0;
+    net_get(s_osm_url, NULL, to_text, &t, &status);
+    return status;
+}
+
+static void home_find(void)
+{
+    char ask[sizeof s_home_ask], here[sizeof s_cfg.country];
+    lock();
+    memcpy(ask, s_home_ask, sizeof ask);
+    s_home_ask[0] = 0;
+    memcpy(here, s_cfg.country, sizeof here);
+    unlock();
+    if (!ask[0]) return;
+    float lat, lon;
+    char said[sizeof s_said + 8];
+    if (as_point(ask, &lat, &lon)) {
+        home_set(lat, lon, "", "");
+        snprintf(said, sizeof said, "HOME %.4f %.4f", (double)lat, (double)lon);
+        home_say(said);
+        ESP_LOGI(TAG, "home from the screen: a point");
+        return;
+    }
+    if (!net_up()) { home_say("NO WIFI: TYPE LAT LON"); return; }
+    const char *buf = s_osm;
+    char slat[24] = "", slon[24] = "", place[sizeof s_cfg.place] = "", country[sizeof s_cfg.country] = "";
+    int status = 0;
+    /* a postcode is the same number in many countries: 10115 alone is Santo Domingo. one with a
+     * digit in it is looked for in home's country first ("91101, Slovakia"), then anywhere. a town
+     * is looked for as it is: "Bratislava, United Kingdom" finds a house of that name */
+    if (strpbrk(ask, "0123456789") && here[0]) {
+        char q[sizeof ask + sizeof here + 2];
+        snprintf(q, sizeof q, "%s, %s", ask, here);
+        status = search(q);
+        json_str(buf, "lat", slat, sizeof slat);
+        if (!slat[0]) vTaskDelay(pdMS_TO_TICKS(1100));    // Nominatim takes a request a second
+    }
+    if (!slat[0]) {
+        status = search(ask);
+        json_str(buf, "lat", slat, sizeof slat);
+    }
+    json_str(buf, "lon", slon, sizeof slon);
+    ESP_LOGI(TAG, "home from the screen: HTTP %d, %s", status, slat[0] ? "found" : "not found");
+    if (status != 200) { home_say("NO ANSWER: TRY AGAIN"); return; }
+    if (!slat[0] || !slon[0]) { home_say("NOT FOUND: TRY ANOTHER"); return; }
+    for (int i = 0; i < (int)(sizeof PLACE_KIND / sizeof PLACE_KIND[0]) && !place[0]; i++) json_str(buf, PLACE_KIND[i], place, sizeof place);
+    if (!place[0]) json_str(buf, "name", place, sizeof place);
+    json_str(buf, "country", country, sizeof country);
+    home_set(strtof(slat, NULL), strtof(slon, NULL), place, country);
+    snprintf(said, sizeof said, "HOME: %s", place[0] ? place : country);
+    home_say(said);
+}
+
+/* --- a newer version? the site publishes the one it flashes in version.json (the first "## " line
+ * of CHANGES.md, .github/workflows/pages.yml). asked once the WiFi is up, then twice a day. the
+ * screen says it with a small note and ABOUT (core/ui_about.c), GET with "newest" --- */
+
+#define UPDATE_URL      SITE_URL "version.json"
+#define UPDATE_EVERY_MS (12u * 3600u * 1000u)
+#define UPDATE_RETRY_MS (30u * 60u * 1000u)   /* no answer, or not one: again in half an hour */
+
+static void update_check(void)
+{
+    static uint32_t asked;                             // ms of the last question, 0: never
+    static int heard;
+    uint32_t now = now_ms();
+    if (!net_up() || (asked && now - asked < (heard ? UPDATE_EVERY_MS : UPDATE_RETRY_MS))) return;
+    asked = now ? now : 1;
+    char buf[160], v[sizeof s_newest] = "";
+    text_t t = { buf, 0, sizeof buf };
+    buf[0] = 0;
+    int status = 0;
+    net_get(UPDATE_URL, NULL, to_text, &t, &status);
+    heard = status == 200 && json_str(buf, "version", v, sizeof v) && v[0];
+    for (const char *p = v; heard && *p; p++) heard = (*p >= '0' && *p <= '9') || *p == '.';   // digits and dots, or it is not one
+    ESP_LOGI(TAG, "the site's version: HTTP %d, %s, this one %s", status, heard ? v : "none", FLIGHT_VERSION);
+    if (!heard) return;
+    lock();
+    snprintf(s_newest, sizeof s_newest, "%s", v);
+    unlock();
+    if (ui_version_cmp(v, FLIGHT_VERSION) > 0) ESP_LOGI(TAG, "the site has a newer version: %s", v);
+}
+
+/* --- the watch list (core/watch.h): the sky round home says which are in range, these lookups
+ * the rest, one plane at a time. both free networks answer one plane by callsign, registration
+ * (with its dash: OE-IJW) or address; a list of them they do not take, only the first --- */
+
+#define WATCH_EVERY_MS 15000u          /* a lookup every 15 s: 8 planes, each looked at every two minutes */
+
+static const char *const WATCH_BASE[FREE_SERVERS] = { "https://api.adsb.lol/v2/", "https://opendata.adsb.fi/api/v2/" };
+static const char *const WATCH_PATH[FREE_SERVERS][3] = {          // by callsign, registration, address
+    { "callsign/", "reg/", "hex/" },
+    { "callsign/", "registration/", "hex/" },
+};
+static const char *const WATCH_KIND[4] = { "?", "callsign", "registration", "address" };
+
+// what the watch list said, for the LED. s_lock held
+static void light_news(int news, uint32_t now)
+{
+    if (news == WATCH_NEWS_RANGE) light_event(&s_light, LIGHT_RANGE, now);
+    else if (news == WATCH_NEWS_UP) light_event(&s_light, LIGHT_UP, now);
+    else if (news == WATCH_NEWS_DOWN) light_event(&s_light, LIGHT_DOWN, now);
+}
+
+/* the answer is read with the planes' own reader: the plane of the list is among the ones it kept.
+ * asked of the other free network than the planes': with both on one, adsb.lol said 429 */
+static void watch_lookup(sky_reader_t *rd, int planes_server)
+{
+    const int server = (planes_server + 1) % FREE_SERVERS;
+    uint32_t now = now_ms();
+    if (s_watch_asked && now - s_watch_asked < WATCH_EVERY_MS) return;
+    char id[WATCH_ID];
+    int kind = WATCH_CALLSIGN;
+    lock();
+    int i = watch_next(&s_watch);
+    if (i >= 0) {
+        memcpy(id, s_watch.w[i].id, sizeof id);
+        kind = watch_kind(&s_watch.w[i]);
+        sky_read_begin(rd, &s_sky, 0, now);
+    }
+    unlock();
+    if (i < 0) return;                                 // none, or all round home
+    s_watch_asked = now;
+    static char url[96];
+    snprintf(url, sizeof url, "%s%s%s", WATCH_BASE[server], WATCH_PATH[server][kind - WATCH_CALLSIGN], id);
+    int status = 0;
+    net_get(url, NULL, to_reader, rd, &status);
+    if (status != 200) {
+        ESP_LOGW(TAG, "watch %s: %s by %s, HTTP %d", id, FREE_NAME[server], WATCH_KIND[kind], status);
+        return;                                        // the same one again next time
+    }
+    char said[40] = "";
+    const char *how = "not heard";
+    lock();
+    watch_t *w = &s_watch.w[i];
+    if (!strcmp(w->id, id)) {                          // the list was not changed meanwhile
+        const plane_t *p = NULL;
+        for (int k = 0; k < rd->n && !p; k++) if (watch_is(w, &rd->got[k])) p = &rd->got[k];
+        if (p) how = p->ground ? "on the ground" : "in the air";
+        light_news(watch_answer(w, kind, p, now, said, sizeof said), now);
+        if (said[0]) say_locked(said, "A WATCHED PLANE", 10000u);
+    }
+    unlock();
+    ESP_LOGI(TAG, "watch %s: %s by %s, %s%s%s", id, FREE_NAME[server], WATCH_KIND[kind], how, said[0] ? ": " : "", said);
+}
+
 static void fetch_task(void *arg)
 {
     (void)arg;
@@ -239,11 +485,13 @@ static void fetch_task(void *arg)
         fr_cfg_t c;
         int configured, fr24;
         static char key[sizeof s_sec.key];
+        home_find();                                   // first: the planes are asked round the new home
         lock();
         c = s_cfg;
         configured = s_sec.ssid[0] != 0;
         fr24 = c.source == SRC_FR24 && s_sec.key[0];
         memcpy(key, s_sec.key, sizeof key);
+        sky_hide_ground(&s_sky, !c.ground);            // the screen's or the site's setting, at once
         unlock();
         map_service(&c);                              // first: a new look or range shows its map before the planes come
         uint32_t every = FREE_EVERY_MS;
@@ -318,6 +566,16 @@ static void fetch_task(void *arg)
                 } else {
                     snprintf(s_server, sizeof s_server, "%s", fr24 ? "FLIGHTRADAR24" : FREE_NAME[server]);
                     s_fetched = now;
+                    char came[40] = "";
+                    uint32_t pick = 0;
+                    light_news(watch_sky(&s_watch, &s_sky, now, came, sizeof came, &pick), now);   // a watched one round home?
+                    light_hold(&s_light, LIGHT_RANGE, watch_near(&s_watch) > 0, now);
+                    light_sky(&s_light, &s_light_cfg, &s_sky, unit_km(c.dist_unit), now);   // an emergency, a plane near
+                    if (came[0]) {
+                        say_locked(came, "A WATCHED PLANE", 10000u);
+                        ESP_LOGI(TAG, "watch: %s", came);
+                    }
+                    if (pick) s_watch_pick = pick;
                 }
             } else {
                 s_sky.status = SKY_HTTP;
@@ -336,7 +594,12 @@ static void fetch_task(void *arg)
             if (fr24) every = FR24_EVERY_MS;
             if (status == 429) every *= 3;            // too many requests: slow down
             geocode();
+            if (status != 429) watch_lookup(&rd, server);   // on the free networks, FR24 or not
+            update_check();
         }
+        lock();                                        // the LED's no data: the WiFi set is not there, or no answer
+        light_hold(&s_light, LIGHT_NODATA, configured && (demo || s_sky.status >= SKY_HTTP), now_ms());
+        unlock();
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(every)); // a new setting cuts the wait short
     }
 }
@@ -357,15 +620,20 @@ static const char *json_esc(const char *s, char *out, int cap)
 
 static void say_cfg(void)
 {
-    char ssid[70], place[84], country[68];
+    char ssid[70], place[84], country[68], watch[WATCH_TEXT];
     lock();
+    watch_text(&s_watch, watch, sizeof watch);         // letters, digits, dashes and commas: nothing to escape
+    int led = 0;                                       // the LED's events as bits: 1 sos, 2 in range, 4 take-off, 8 landing, 16 near, 32 no data
+    for (int ev = 0; ev < LIGHT_EVENTS; ev++) led |= s_light_cfg.on[ev] ? 1 << ev : 0;
     printf("OWLOS CFG {\"ssid\":\"%s\",\"lat\":%.5f,\"lon\":%.5f,\"place\":\"%s\",\"country\":\"%s\",\"src\":\"%s\",\"key\":%s,"
-           "\"up\":%d,\"flip\":%d,\"theme\":%d,\"look\":%d,\"map\":%d,\"version\":\"%s\","
+           "\"up\":%d,\"flip\":%d,\"theme\":%d,\"look\":%d,\"map\":%d,\"ground\":%d,\"watch\":\"%s\","
+           "\"led\":%d,\"led_level\":%d,\"led_hold\":%d,\"led_near\":%d,\"led_red\":%d,\"version\":\"%s\",\"newest\":\"%s\","
            "\"uptime\":%u,\"ran\":%u,\"reset\":\"%s\",\"screen\":%d}\n",
            json_esc(s_sec.ssid, ssid, sizeof ssid), (double)s_cfg.lat, (double)s_cfg.lon,
            json_esc(s_cfg.place, place, sizeof place), json_esc(s_cfg.country, country, sizeof country),
            s_cfg.source == SRC_FR24 ? "fr24" : "free", s_sec.key[0] ? "true" : "false", s_cfg.up, s_cfg.flip,
-           s_cfg.theme, s_cfg.look, s_cfg.map, FLIGHT_VERSION,
+           s_cfg.theme, s_cfg.look, s_cfg.map, s_cfg.ground, watch, led, s_light_cfg.level, s_light_cfg.hold,
+           light_near_units(&s_light_cfg), light_red_gpio(&s_light_cfg), FLIGHT_VERSION, s_newest,
            (unsigned)(now_ms() / 1000u), (unsigned)s_ran_s, s_reset, s_screen);
     unlock();
 }
@@ -402,6 +670,25 @@ static void on_line(const char *line)
     if (json_num(j, "theme", &v) && v >= 0 && v < UI_THEMES) c.theme = (uint8_t)v;
     if (json_num(j, "look", &v) && v >= 0 && v < LOOKS) c.look = (uint8_t)v;
     if (json_num(j, "map", &v)) c.map = v != 0;
+    if (json_num(j, "ground", &v)) c.ground = v != 0;
+    char watch[WATCH_TEXT];
+    int watched = json_str(j, "watch", watch, sizeof watch);   // "" empties it
+    light_cfg_t light;
+    lock();
+    light = s_light_cfg;
+    unlock();
+    int lit = 0;                                       // the LED: its events as bits (say_cfg), how bright, how long
+    if (json_num(j, "led", &v) && v >= 0 && v < (1 << LIGHT_EVENTS)) {
+        for (int ev = 0; ev < LIGHT_EVENTS; ev++) light.on[ev] = ((int)v >> ev) & 1;
+        lit = 1;
+    }
+    if (json_num(j, "led_level", &v) && v >= 0 && v < LIGHT_LEVELS) { light.level = (uint8_t)v; lit = 1; }
+    if (json_num(j, "led_hold", &v) && v >= 0 && v < LIGHT_HOLDS) { light.hold = (uint8_t)v; lit = 1; }
+    int near = -1;                                     // 1, 2, 5 or 10 of the distance unit
+    if (json_num(j, "led_near", &v) && (near = light_near_index((int)v)) >= 0) { light.near = (uint8_t)near; lit = 1; }
+    int red = -1;                                      // the red one's GPIO, 4 or 22
+    if (json_num(j, "led_red", &v) && (red = light_red_index((int)v)) >= 0) { light.red = (uint8_t)red; lit = 1; }
+    if (json_num(j, "led_test", &v) && v) s_light_test = 1;   // nothing kept: the screen task shows it
 #if LCD_PROFILES
     if (json_num(j, "screen", &v) && v >= 0 && v < LCD_PROFILES) s_screen_set = (int)v;   // the 2.8" CYD's revision: 0 v1, 1 v2, 2 v3
 #endif
@@ -414,7 +701,21 @@ static void on_line(const char *line)
     s_cfg_new = 1;
     if (home) sky_home(&s_sky, c.lat, c.lon);
     if (wifi) { s_sky.n = 0; s_sky.status = SKY_CONNECTING; s_wifi_try = now_ms(); }   // the demo planes go
+    if (watched) {
+        watch_set(&s_watch, watch);
+        watch_text(&s_watch, watch, sizeof watch);   // as it is kept: capitals, each once
+        s_watch_asked = 0;
+    }
+    if (lit) {
+        s_light_cfg = light;
+        s_light_new = 1;
+    }
     unlock();
+    if (lit) store_save_light(&light);
+    if (watched) {
+        store_save_watch(watch);
+        ESP_LOGI(TAG, "watch list from the site: %s", watch[0] ? watch : "none");
+    }
     if (wifi) net_reconnect(&sec);
     ESP_LOGI(TAG, "settings from the site: network \"%s\", home %.4f %.4f, %s%s", sec.ssid, (double)c.lat, (double)c.lon,
              c.source == SRC_FR24 ? "FR24" : "free networks", sec.key[0] ? ", FR24 key stored" : "");
@@ -583,8 +884,13 @@ static void ui_task(void *arg)
         vTaskDelete(NULL);
     }
     ui_set_cfg(&s_ui, &c);
+    lock();
+    s_ui.light = s_light_cfg;                          // what lights the LED on the back
+    unlock();
+    led_init(light_red_gpio(&s_ui.light));
     s_ui.map = &s_map;                                 // the fetch task makes it, the scope draws it
     ui_clock_us = now_us;                              // the layers get timed, the 10 s log says where it goes
+    ui_version = FLIGHT_VERSION;                       // ABOUT says it, the note compares the site's with it
 #if LCD_PROFILES
     ui_screen_name = disp_profile_name();              // the screen offers the other ones
 #endif
@@ -627,6 +933,11 @@ static void ui_task(void *arg)
 #endif
         if (ev) ui_button(&s_ui, ev == BTN_LONG ? 2 : 1, &cmd);
         touch_sample(1);
+        if (s_nts || ev) {                             // a finger or BOOT: what the LED shows is seen, it goes out
+            lock();
+            light_touch(&s_light);
+            unlock();
+        }
         for (int i = 0; i < s_nts; i++) {
             const tsample_t *s = &s_ts[i];
             ui_touch(&s_ui, s->down, s->x, s->y, s->rx, s->ry, s->t, &cmd);
@@ -645,7 +956,7 @@ static void ui_task(void *arg)
         if (cmd.cfg) {
             int flipped = s_ui.cfg.flip != c.flip;
             lock();
-            s_ui.cfg.lat = s_cfg.lat;                  // home and its name only come from the site
+            s_ui.cfg.lat = s_cfg.lat;                  // home and its name come from s_cfg: the site, or home_find
             s_ui.cfg.lon = s_cfg.lon;
             memcpy(s_ui.cfg.place, s_cfg.place, sizeof s_ui.cfg.place);
             memcpy(s_ui.cfg.country, s_cfg.country, sizeof s_ui.cfg.country);
@@ -658,12 +969,64 @@ static void ui_task(void *arg)
         if (cmd.refetch) xTaskNotifyGive(s_fetch);
         if (cmd.scan) net_scan_request(now);
         if (cmd.wifi) wifi_from_screen();
+        if (cmd.home) {                                // typed on the screen: the fetch task finds it
+            lock();
+            snprintf(s_home_ask, sizeof s_home_ask, "%s", s_ui.home_text);
+            unlock();
+            xTaskNotifyGive(s_fetch);
+        }
+        if (cmd.watch) {                               // a new watch list typed on the screen
+            char text[WATCH_TEXT];
+            lock();
+            watch_set(&s_watch, s_ui.watch_text);
+            watch_text(&s_watch, text, sizeof text);
+            s_watch_asked = 0;
+            unlock();
+            store_save_watch(text);
+            ESP_LOGI(TAG, "watch list from the screen: %s", text[0] ? text : "none");
+            xTaskNotifyGive(s_fetch);
+        }
+        if (s_said_new) {                              // what the fetch task found: a home, a watched plane
+            lock();
+            snprintf(s_ui.toast, sizeof s_ui.toast, "%s", s_said);
+            s_ui.toast_until = now + s_said_ms;
+            s_said_new = 0;
+            unlock();
+        }
+        if (s_watch_pick) {                            // a watched one came in range: picked, unless one is
+            if (!s_ui.sel) s_ui.sel = s_watch_pick;
+            s_watch_pick = 0;
+        }
         net_scan_poll(now);
         if (dirty && now - dirty > 3000u) {           // holding + is one flash write, not twenty
             store_save_cfg(&s_ui.cfg);
             dirty = 0;
         }
         if (cmd.save_cal) store_save_cal(&s_ui.cal);
+        if (s_light_new) {                             // the site's LED settings
+            lock();
+            s_ui.light = s_light_cfg;
+            s_light_new = 0;
+            unlock();
+        }
+        if (cmd.light) {                               // SET's LED rows
+            lock();
+            s_light_cfg = s_ui.light;
+            unlock();
+            store_save_light(&s_ui.light);
+        }
+        uint8_t rgb[3];
+        lock();
+        if (cmd.light_test || s_light_test) {
+            light_test(&s_light, now);
+            ESP_LOGI(TAG, "LED test from %s: red, green, blue", s_light_test ? "the site" : "the screen");
+            s_light_test = 0;
+        }
+        light_colour(&s_light, &s_ui.light, now, rgb);
+        int red = light_red_gpio(&s_ui.light);
+        unlock();
+        led_red(red);                                  // SET's RED ON row or the site moved it
+        led_set(rgb);
 
         lock();
         memcpy(&s_ui.snap, &s_sky, sizeof s_sky);
@@ -677,6 +1040,8 @@ static void ui_task(void *arg)
         snprintf(n->server, sizeof n->server, "%s", s_server);
         n->http = s_http;
         n->fetched = s_fetched;
+        s_ui.watch = s_watch;                          // SET says what the watched planes do
+        memcpy(s_ui.newest, s_newest, sizeof s_ui.newest);   // and ABOUT what the site has
         unlock();
         net_ip(n->ip, sizeof n->ip);
         int naps = 0;
@@ -771,17 +1136,23 @@ void app_main(void)
     s_lock = xSemaphoreCreateMutex();
     if (!store_load_cfg(&s_cfg)) fr_cfg_defaults(&s_cfg);
     store_load_secrets(&s_sec);
+    char watch[WATCH_TEXT];
+    store_load_watch(watch, sizeof watch);
+    watch_set(&s_watch, watch);
+    store_load_light(&s_light_cfg);
     s_demo_on = !s_sec.ssid[0];                         // no WiFi set: the demo from the first frame
     sky_init(&s_sky, s_cfg.lat, s_cfg.lon);
     demo_init(&s_demo, range_km(&s_cfg), esp_random());
-    printf("OWLOS READY flight-radar %s\n", FLIGHT_VERSION);
     tiles_init();
     map_mem = iram_first;
-    console_start(on_line);
     net_start(&s_sec);                                 // up even without settings: a SET then just connects
     /* the TLS handshake runs on the fetch task, and the map is made there. one core (the C3): it
      * gets the screen's priority, the two take turns a tick each. under the screen it had less
      * than a millisecond a frame, a map took it over ten seconds and IDLE starved into the watchdog */
     xTaskCreatePinnedToCore(fetch_task, "fetch", 12288, NULL, portNUM_PROCESSORS > 1 ? 4 : 5, &s_fetch, 0);
     xTaskCreatePinnedToCore(ui_task, "ui", 8192, NULL, 5, NULL, portNUM_PROCESSORS > 1 ? 1 : 0);
+    /* the console last, and READY with it: the site sends its SET the moment it reads READY. said
+     * before, the SET was lost (no console yet) or notified a fetch task not made yet (an assert) */
+    console_start(on_line);
+    printf("OWLOS READY flight-radar %s\n", FLIGHT_VERSION);
 }

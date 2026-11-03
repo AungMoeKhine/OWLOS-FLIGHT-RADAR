@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OWLOS Flight Radar - flash it from the browser</title>
-<meta name="description" content="The planes around your home on an ESP32 board with a screen. Flash it from Chrome or Edge, then send it your WiFi and your home point over the same USB cable.">
+<meta name="description" content="The planes around your home on an ESP32 board with a screen. Flash it from Chrome or Edge, a Chromebook too, then send it your WiFi and your home point over the same USB cable.">
 <script type="module" src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"></script>
 <style>
   :root {
@@ -113,15 +113,36 @@
     color: var(--warn); font: 700 14px "Cascadia Mono", Consolas, monospace; letter-spacing: 1px; text-decoration: none;
   }
   .boot-tag:hover { background: rgba(255, 184, 72, .1); }
+  /* the test banner, for the hour after a new version goes up: out with its block and its script lines */
+  .testing {
+    margin: 0 0 22px; padding: 16px 20px; border: 2px solid var(--warn); border-radius: 12px; background: rgba(255, 184, 72, .07);
+  }
+  .testing h2 { margin: 0 0 8px; font: 700 30px/1.25 "Cascadia Mono", Consolas, monospace; letter-spacing: 1px; color: var(--warn); }
+  .testing p { margin: 0; color: var(--focus); font-size: 18px; }
   footer { margin-top: 36px; color: var(--dim); font-size: 14px; }
+  .newest { margin: 0 0 10px; color: var(--dim); }
+  .newest b { color: var(--prim); font-family: "Cascadia Mono", Consolas, monospace; }
+  .changes h3 { margin: 16px 0 6px; font: 700 16px "Cascadia Mono", Consolas, monospace; letter-spacing: 1px; color: var(--prim); }
+  .changes h3:first-of-type { margin-top: 4px; }
+  .changes h3 span { color: var(--dim); font-weight: 400; }
+  .changes > p { margin: 0; color: var(--dim); }
   @media (max-width: 720px) {
     form, .actions, .boot { grid-template-columns: 1fr; }
     header h1 { font-size: 26px; }
+    .testing h2 { font-size: 22px; }
   }
 </style>
 </head>
 <body>
 <div class="wrap">
+  <!-- the test banner: up for the hour after a new version goes up, then out with .testing in the
+       style and its lines in the script. the time is when the workflow put this page up -->
+  <div class="testing" role="status">
+    <h2>WE ARE TESTING THE NEW VERSION, 0.3</h2>
+    <p><span id="testing-when">Give us about an hour.</span> You can flash it now, but the test is still
+       going on. Thank you for understanding.</p>
+  </div>
+
   <header>
     <h1>OWLOS Flight Radar</h1>
     <p>The planes around your home on an ESP32 board with a screen: each one a silhouette turned the way it
@@ -146,8 +167,9 @@
 
   <h2 class="step">1 <span>/</span> FLASH THE BOARD</h2>
   <div class="box">
+    <p class="newest">The newest firmware: <b id="newest">@VERSION@</b>. <a href="#versions">What changed in each version.</a></p>
     <ol>
-      <li>Use <b>Chrome or Edge on a computer</b>. Flashing goes over Web Serial, phones and Firefox can't do it.</li>
+      <li>Use <b>Chrome or Edge on a computer</b>, a Chromebook too. Flashing goes over Web Serial, phones and Firefox can't do it.</li>
       <li>Plug the board in with a USB cable that carries data (some only charge).</li>
       <li>Press <b>CONNECT &amp; FLASH</b> of your board, pick its port and say <b>yes to erase</b>: whatever was on the board is replaced.</li>
       <li>No port in the list? On Windows the CH340 driver may be missing. Won't connect? Hold <b>BOOT</b> while you plug it in.</li>
@@ -158,6 +180,9 @@
           take the WiFi right there: <b>SET UP WIFI</b>, tap your network, type its password (step 3 shows where).
           Or send it from this page, step 2.</li>
       <li>Close the flasher's window when it's done: the port is free again for step 2.</li>
+      <li><b>An update</b> is the same button, with <b>no to erase</b>: the board keeps its WiFi, home, watch list
+          and the rest. A board on WiFi finds out by itself when a new version is here: a small <b>NEW VERSION</b> note
+          on its screen opens ABOUT, which has a code to scan for this page.</li>
     </ol>
   </div>
   <div class="grid">
@@ -170,7 +195,7 @@
         <a class="boot-tag" href="#boot">WRONG PICTURE? PRESS BOOT</a>
         <esp-web-install-button class="flash" manifest="fw/ili9341/manifest.json">
           <button slot="activate">CONNECT &amp; FLASH</button>
-          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer.</span>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
           <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
         </esp-web-install-button>
       </div>
@@ -183,7 +208,7 @@
           itself). The board in the film: a bigger scope, the panel lists more planes.</div>
         <esp-web-install-button class="flash" manifest="fw/st7796/manifest.json">
           <button slot="activate">CONNECT &amp; FLASH</button>
-          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer.</span>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
           <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
         </esp-web-install-button>
       </div>
@@ -196,7 +221,7 @@
           glass: tap a plane for its card, tap nothing for HUE, LIST and SET.</div>
         <esp-web-install-button class="flash" manifest="fw/gc9a01/manifest.json">
           <button slot="activate">CONNECT &amp; FLASH</button>
-          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer.</span>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
           <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
         </esp-web-install-button>
       </div>
@@ -209,7 +234,7 @@
           steps through the planes, hold it for the next range. Map up, colours and upside down come from step 2.</div>
         <esp-web-install-button class="flash" manifest="fw/ili9486/manifest.json">
           <button slot="activate">CONNECT &amp; FLASH</button>
-          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer.</span>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
           <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
         </esp-web-install-button>
       </div>
@@ -338,7 +363,56 @@
               <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
             </select>
           </label>
+          <label>Planes on the ground
+            <select id="ground">
+              <option value="">keep as it is</option><option value="1">shown</option>
+              <option value="0">hidden: next to an airport</option>
+            </select>
+          </label>
+          <label>Planes to follow
+            <input id="watch" type="text" maxlength="99" autocomplete="off" spellcheck="false"
+                   placeholder="EZY12AB, G-EUPT, 4CA7B4 or none">
+          </label>
+          <label>LED on the back (2.8" and 3.5" CYD)
+            <select id="led">
+              <option value="">keep as it is</option><option value="15">watched planes and emergencies</option>
+              <option value="31">those, and any plane near</option><option value="47">those, and no data</option>
+              <option value="63">all of them</option><option value="1">emergencies only</option>
+              <option value="0">off</option>
+            </select>
+          </label>
+          <label>LED: how near is near
+            <select id="led_near">
+              <option value="">keep as it is</option><option value="1">1 km (or NM, or mile)</option>
+              <option value="2">2</option><option value="5">5</option><option value="10">10</option>
+            </select>
+          </label>
+          <label>LED brightness
+            <select id="led_level">
+              <option value="">keep as it is</option><option value="0">low, for the night</option>
+              <option value="1">mid</option><option value="2">high</option>
+            </select>
+          </label>
+          <label>LED lit
+            <select id="led_hold">
+              <option value="">keep as it is</option><option value="0">till the screen is touched, a minute at most</option>
+              <option value="1">10 seconds</option><option value="2">while it lasts</option>
+            </select>
+          </label>
+          <label>LED: the red one's pin
+            <select id="led_red">
+              <option value="">keep as it is</option><option value="4">GPIO 4: most CYD boards</option>
+              <option value="22">GPIO 22: LCDWIKI and Elegoo ESP32-32E boards</option>
+            </select>
+          </label>
         </div>
+        <p class="note">Planes to follow: up to 8 callsigns, registrations (with their dash) or hex addresses. The
+          board says when one comes in range and picks it, and when one takes off or lands anywhere: it asks the free
+          networks about one of them every 15 seconds. Left empty, the board keeps its list; <b>none</b> empties it.</p>
+        <p class="note">The LED: red blinking fast for an emergency squawk round home, green when a watched plane comes in
+          range, blue when one takes off, cyan when one lands, white for any plane in the air near home, amber for no
+          data. Each one on or off, and the test, are on the board: SET, the LED tab. No red in the test: the board
+          is one whose red is on the other pin, change it here or with RED ON in the same tab.</p>
         <p class="note">Optional. Boards with touch change these on the screen itself (the look's button over
           the scope, and SET). The 3.5" RPi LCD has no touch: set them here. The map comes from
           <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>: the board
@@ -389,6 +463,7 @@
           <li>The panel says its callsign, type and registration, height, speed and track, how far it is and which way, its squawk.</li>
           <li>The line ahead of it is where it will be in a minute.</li>
           <li><b>NEXT</b> picks the next nearest one, <b>X</b> lets it go.</li>
+          <li><b>WATCH</b> puts it on the watch list by its registration (lit while it is on it), again takes it off.</li>
         </ul>
       </figcaption>
     </figure>
@@ -418,12 +493,14 @@
     </figure>
     <figure>
       <a href="shots/guide/setup.png" target="_blank"><img src="shots/guide/setup.png" loading="lazy"
-         alt="the settings page with arrows: minus and plus, tap to change, drag to scroll, BACK"></a>
+         alt="the settings page with arrows: minus and plus, tap to change, drag to scroll, the tabs VIEW DATA LED, BACK"></a>
       <figcaption>
         <h3>SET</h3>
         <ul>
-          <li>The range and its units, height in feet or metres, map up, the screen upside down, labels, colours, the look,
-              the map, where the planes come from, the WiFi and the touch alignment.</li>
+          <li>Three tabs on the bar. <b>VIEW</b>: the range, units, map up, the screen upside down, labels, colours, the look,
+              the map, the touch alignment. <b>DATA</b>: planes on the ground shown or hidden, the watch list, where the
+              planes come from, home, the WiFi, ABOUT. <b>LED</b> (2.8" and 3.5" CYD): what lights the LED on the back, how near
+              is near, how bright, for how long, TEST shows its red, green and blue, and RED ON picks the red one's pin.</li>
           <li><b>Tap a button</b> to change it, <b>minus and plus</b> for numbers. Drag to see the rest.</li>
         </ul>
       </figcaption>
@@ -464,6 +541,61 @@
       </figcaption>
     </figure>
     <figure>
+      <a href="shots/guide/home.png" target="_blank"><img src="shots/guide/home.png" loading="lazy"
+         alt="the keyboard for a new home, with arrows: what it takes, a town, a postcode or lat lon, ABC, #+= for the space, CANCEL, FIND"></a>
+      <figcaption>
+        <h3>HOME</h3>
+        <ul>
+          <li>SET, the HOME row, <b>CHANGE</b>: type a town, a postcode, or the point as 48.9 18.1. <b>FIND</b> asks
+              OpenStreetMap where it is, a point needs no WiFi. The planes come round the new home at once.</li>
+          <li>A postcode is looked for first in the country of the home the board has, then anywhere. One from another
+              country goes with its name: 10115, Germany. OpenStreetMap does not know every full postcode, the town's name always works.</li>
+          <li><b>#+=</b> has the space. The round board and the RPi LCD take their home from step 2.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/watch.png" target="_blank"><img src="shots/guide/watch.png" loading="lazy"
+         alt="the keyboard for the planes to follow, with arrows: what it takes, the planes by commas, #+= for the comma and the dash, CANCEL, SAVE"></a>
+      <figcaption>
+        <h3>WATCH</h3>
+        <ul>
+          <li>SET, DATA, the WATCH row, or WATCH on a picked plane's panel: up to 8 planes, by commas. A callsign as the plane sends it (EZY12AB, BAW123, not the
+              flight number on a ticket), a registration with its dash (G-EUPT), or the hex address (4CA7B4). Letters come
+              out as capitals by themselves, <b>#+=</b> has the comma and the dash.</li>
+          <li>One comes in range: <b>EZY12AB IN RANGE</b>, and the board picks it on the scope. The others it asks the free
+              networks about, one every 15 seconds: <b>IS FLYING</b> when one takes off anywhere, <b>LANDED</b> when it is down.</li>
+          <li>The round board and the RPi LCD take their list from step 2.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/news.png" target="_blank"><img src="shots/guide/news.png" loading="lazy"
+         alt="the radar with a note in the panel's title: NEW VERSION, tap for ABOUT"></a>
+      <figcaption>
+        <h3>A NEW VERSION</h3>
+        <ul>
+          <li>A board on WiFi asks this page twice a day which version it has. When it is newer, a small
+              <b>NEW VERSION</b> note shows: in the panel's title over the radar, under the town's card over the map, under
+              home on the round glass. A tap on it opens ABOUT. Nothing else changes, the board goes on as it was.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/about.png" target="_blank"><img src="shots/guide/about.png" loading="lazy"
+         alt="ABOUT with arrows: this version, what the site has, how to update, the code to scan for the site, its address, BACK"></a>
+      <figcaption>
+        <h3>ABOUT</h3>
+        <ul>
+          <li>SET, DATA, the ABOUT row, or the note: the version the board runs, the one this page has, the board, whether
+              an FR24 key is stored.</li>
+          <li><b>Scan the code</b> with a phone for this page, or type the address under it. To update, open it on a
+              computer, <b>CONNECT &amp; FLASH</b> and no to erase: the settings stay.</li>
+          <li>The history of the versions is at the end of this page.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
       <a href="shots/guide/screen.png" target="_blank"><img class="narrow" src="shots/guide/screen.png" loading="lazy"
          alt="the 2.8 inch board in its first seconds: a card says SCREEN WRONG? PRESS BOOT"></a>
       <figcaption>
@@ -492,6 +624,11 @@
       <li><b>Hold a finger 4 s</b> on an empty spot to align the touch again.</li>
       <li><b>The RPi LCD</b> has no touch: BOOT steps through the planes, held it changes the range. The rest comes from step 2.</li>
     </ul>
+  </div>
+
+  <h2 class="step" id="versions">VERSIONS</h2>
+  <div class="box changes" id="changes">
+    <p>What changed in each version, the newest first: <a href="CHANGES.md">CHANGES.md</a>.</p>
   </div>
 
   <footer>
@@ -625,8 +762,82 @@ function settings() {
     s.key = $('key').value.trim();
     if (!s.key) throw 'Flightradar24 needs its key. Or pick the free networks.';
   }
-  for (const k of ['up', 'flip', 'theme', 'look', 'map']) if ($(k).value !== '') s[k] = +$(k).value;   // left out: the board keeps its own
+  for (const k of ['up', 'flip', 'theme', 'look', 'map', 'ground', 'led', 'led_level', 'led_hold', 'led_near', 'led_red']) if ($(k).value !== '') s[k] = +$(k).value;   // left out: the board keeps its own
+  if (s.led_red) s.led_test = 1;                     // the red one moved: show it
+  const watch = $('watch').value.trim();
+  if (watch) s.watch = /^none$/i.test(watch) ? '' : watch;
   return s;
+}
+
+/* --- the versions: version.json is what the boards ask for, CHANGES.md the history. the workflow
+ * puts both next to the page, from the one CHANGES.md whose first "## " line is the version --- */
+let newest = '';
+
+function vcmp(a, b) {                                // 0.9 < 0.10: number by number
+  const x = String(a).split('.').map(n => parseInt(n, 10) || 0), y = String(b).split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] || 0) - (y[i] || 0);
+    if (d) {
+      return d;
+    }
+  }
+  return 0;
+}
+
+// CHANGES.md as the page shows it: a heading a version, its points under it. text only, nothing
+// from the file goes in as HTML
+function changes(md) {
+  const out = [];
+  let list = null, item = null;
+  for (const line of md.split(/\r?\n/)) {
+    const h = line.match(/^## (\S+)/);
+    if (h) {
+      const h3 = document.createElement('h3');
+      h3.textContent = h[1];
+      if (!out.length) {
+        const s = document.createElement('span');
+        s.textContent = ', the newest';
+        h3.append(s);
+      }
+      list = document.createElement('ul');
+      out.push(h3, list);
+      item = null;
+    } else if (list && /^- /.test(line)) {
+      item = document.createElement('li');
+      item.textContent = line.slice(2);
+      list.append(item);
+    } else if (item && /^\s+\S/.test(line)) {        // a point goes on over the next lines
+      item.textContent += ' ' + line.trim();
+    }
+  }
+  if (out.length) {
+    $('changes').replaceChildren(...out);
+  }
+}
+
+fetch('version.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).then(j => {
+  if (j && /^[0-9]+(\.[0-9]+)*$/.test(j.version)) {
+    newest = j.version;
+    if ($('newest').textContent.includes('@')) {     // not built by the workflow: no build number to show
+      $('newest').textContent = newest;
+    }
+  }
+}).catch(() => {});
+fetch('CHANGES.md', { cache: 'no-cache' }).then(r => r.ok ? r.text() : null).then(t => {
+  if (t) {
+    changes(t);
+  }
+}).catch(() => {});
+
+/* the test banner: its hour in the reader's own clock. the workflow writes the time in; a page not
+   built by it keeps "about an hour" */
+{
+  const built = new Date('@BUILT@');
+  if (!isNaN(built)) {
+    const hm = d => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });   // English words, the reader's time zone
+    $('testing-when').textContent = 'From ' + hm(built) + ' to about ' + hm(new Date(built.getTime() + 3600e3)) +
+      ' on ' + built.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }) + ', by your clock.';
+  }
 }
 
 /* --- the board on the serial port --- */
@@ -680,7 +891,7 @@ class Board {
 }
 
 async function connect() {
-  if (!('serial' in navigator)) throw 'This browser has no Web Serial. Use Chrome or Edge on a computer.';
+  if (!('serial' in navigator)) throw 'This browser has no Web Serial. Use Chrome or Edge on a computer or a Chromebook.';
   const b = new Board();
   try { await b.open(); }
   catch (e) {
@@ -714,12 +925,16 @@ async function show(b) {
       ', home ' + c.lat.toFixed(4) + ' ' + c.lon.toFixed(4) +
       (c.place || c.country ? ' (' + [c.place, c.country].filter(Boolean).join(', ') + ')' : '') +
       ', ' + (c.src === 'fr24' ? 'Flightradar24' : 'the free networks') +
-      ', Flightradar24 key ' + (c.key ? 'stored' : 'none') + '.', 'ok');
+      ', Flightradar24 key ' + (c.key ? 'stored' : 'none') +
+      (c.watch ? ', following ' + c.watch : '') + '.', 'ok');
   if (c.up !== undefined) {
     const theme = ['Arctic', 'Phosphor', 'Amber', 'Crimson', 'Synth'][c.theme] || '?';
     const look = ['radar', 'flat map', 'classic map'][c.look];
     say('The screen: ' + (c.up ? c.up + '° up' : 'north up') + ', ' + (c.flip ? 'upside down' : 'the right way up') +
         ', ' + theme + ' colours' + (look ? ', the ' + look + ' look, map ' + (c.map ? 'on' : 'off') : '') +
+        (c.ground === 0 ? ', planes on the ground hidden' : '') +
+        (c.led === 0 ? ', the LED off' : c.led ? ', the LED ' + (['low', 'mid', 'high'][c.led_level] || '?') +
+          (c.led_red ? ', its red on GPIO ' + c.led_red : '') : '') +
         (c.screen >= 0 ? ', the 2.8" CYD\'s v' + (c.screen + 1) + ' screen' : '') + '.', 'ok');
   }
   // how long it runs, and how the run before ended: a board found standing still says here whether it
@@ -727,6 +942,13 @@ async function show(b) {
   if (c.uptime !== undefined) {
     say('Running for ' + span(c.uptime) + ', started after: ' + c.reset +
         (c.ran ? ', the run before lasted ' + span(c.ran) : '') + '.', 'ok');
+  }
+  if (c.version) {                                   // and whether this page has a newer one for it
+    if (newest && vcmp(newest, c.version) > 0) {
+      say('Firmware ' + c.version + ', this page has ' + newest + ': flash it in step 1, no to erase keeps these settings.', 'wait');
+    } else {
+      say('Firmware ' + c.version + (newest && vcmp(newest, c.version) === 0 ? ', the newest.' : '.'), 'ok');
+    }
   }
   return c;
 }

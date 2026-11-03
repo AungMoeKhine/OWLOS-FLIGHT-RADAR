@@ -1274,18 +1274,19 @@ static void panel_title(canvas_t *cv, const char *title, const char *right)
 
 static int btn_x(int i) { return TX - 3 + i * (BTN_W + 3); }
 
-static void buttons(ui_t *u, canvas_t *cv, const char *a, const char *b, const char *c)
+// the panel's three buttons, lit: the one shown lit (-1 none)
+static void buttons(ui_t *u, canvas_t *cv, const char *a, const char *b, const char *c, int lit)
 {
     if (!gfx_touches(cv, BTN_Y - 1, BTN_Y + BTN_H + 1)) return;
 #if RADAR_HAS_TOUCH
     const char *L[3] = { a, b, c };
     for (int i = 0; i < 3; i++) {
         int pressed = u->t_down && !u->t_moved && u->t_hit == HIT_BTN + i;
-        button(cv, btn_x(i), BTN_Y, BTN_W, BTN_H, L[i], pressed ? 2 : 0);
+        button(cv, btn_x(i), BTN_Y, BTN_W, BTN_H, L[i], pressed ? 2 : i == lit);
     }
 #else
     // no touch: where the buttons would be, what BOOT does
-    (void)a; (void)b; (void)c;
+    (void)a; (void)b; (void)c; (void)lit;
     int x = btn_x(0), w = 3 * BTN_W + 6;
     chamfer_box(cv, x, BTN_Y, w, BTN_H, C_PANEL, 170, C_QUIET, 220);
     const char *l1 = u->sel ? "BOOT: NEXT PLANE" : "BOOT: NEAREST PLANE", *l2 = "HOLD BOOT: RANGE";
@@ -1302,7 +1303,8 @@ static void panel_overview(ui_t *u, canvas_t *cv)
 {
     char buf[24];
     char d[16];
-    panel_title(cv, RADAR_NAME, 0);
+    if (ui_update(u) && !square_look(u)) update_note(u, cv);   // a newer version: over the radar the title says so
+    else panel_title(cv, RADAR_NAME, 0);
     if (gfx_touches(cv, 18, 68)) {                     // how many, in what range, around where
         int n = 0;
         for (int i = 0; i < u->snap.n; i++) n += u->spot[i].vis == 1;
@@ -1334,7 +1336,7 @@ static void panel_overview(ui_t *u, canvas_t *cv)
         micro_text(cv, TX2 - micro_width(d, 1), y + 3, d, C_DIM, 230, 1);
     }
     if (!u->n_order) micro_text(cv, TX, NEAR_Y0 + 4, u->snap.status == SKY_OK ? "SKY IS EMPTY" : "WAITING", C_DIM, 230, 1);
-    buttons(u, cv, "HUE", "LIST", "SET");
+    buttons(u, cv, "HUE", "LIST", "SET", -1);
 }
 
 static void panel_plane(ui_t *u, canvas_t *cv, const plane_t *p)
@@ -1387,7 +1389,7 @@ static void panel_plane(ui_t *u, canvas_t *cv, const plane_t *p)
         snprintf(buf, sizeof buf, "SQUAWK %04u", (unsigned)p->squawk);
         micro_text(cv, TX, y + 1, buf, C_DIM, 230, 1);
     }
-    buttons(u, cv, "NEXT", "LIST", "X");
+    buttons(u, cv, "NEXT", "WATCH", "X", watched(u, p) ? 1 : -1);   // lit: on the watch list
 }
 
 #else
@@ -1492,6 +1494,46 @@ static void round_note(ui_t *u, canvas_t *cv)
 
 #endif
 
+/* the site has a newer version: a small note, a tap on it opens ABOUT. over the radar it is the
+ * panel's title, over the square map a card under the town's, on the round glass one under its
+ * box. while a plane is picked or the round menu is up, they have the place */
+int update_note_box(const ui_t *u, note_box_t *b)
+{
+    if (!ui_update(u) || u->view != VIEW_MAIN) return 0;
+    char t[24];
+    update_text(u, t, sizeof t);
+    const int w = micro_width(t, 1) + 12;
+#if RADAR_ROUND
+    if (u->sel || menu_up(u) || demo_shown(u)) return 0;
+    *b = (note_box_t){ SCX - w / 2, SCY + 79, w, 13 };
+#else
+    if (!square_look(u)) {
+        if (u->sel) return 0;
+        *b = (note_box_t){ TX - 3, 3, TX2 - TX + 6, 14 };
+    } else {
+        *b = (note_box_t){ 2, 28, w, 13 };
+    }
+#endif
+    return 1;
+}
+
+void update_note(ui_t *u, canvas_t *cv)
+{
+    note_box_t b;
+    if (!update_note_box(u, &b) || !gfx_touches(cv, b.y, b.y + b.h)) return;
+    char t[24];
+    update_text(u, t, sizeof t);
+    const int pressed = u->t_down && !u->t_moved && u->t_hit == HIT_NEWS;
+    const int tx = b.x + (b.w - micro_width(t, 1)) / 2, ty = b.y + (b.h - MICRO_H) / 2 + 1;   // in the middle
+    if (u->cfg.look == LOOK_CLASSIC) {                 // on the light map: paper, dark ink
+        paper_card(cv, b.x, b.y, b.w, b.h);
+        micro_text(cv, tx, ty, t, pressed ? CL_BLUE : CL_INK, 250, 1);
+        return;
+    }
+    chamfer_box(cv, b.x, b.y, b.w, b.h, pressed ? C_PRIM : C_BG0, pressed ? 150 : 200, C_FOCUS, 220);
+    micro_text(cv, tx, ty, t, C_FOCUS, 250, 1);
+}
+
 void main_draw(ui_t *u, canvas_t *cv)
 {
 #if !RADAR_ROUND
@@ -1505,6 +1547,7 @@ void main_draw(ui_t *u, canvas_t *cv)
         gesture(u, cv);
         ui_lap(u, cv, 3);
         sq_chrome(u, cv);
+        update_note(u, cv);
         demo_card(u, cv);
         if (panel_shown(u)) {                          // slid in over the map: darker, so it reads on any ground
             chamfer_box(cv, PX, 2, PW, GFX_H - 4, C_PANEL, 225, C_QUIET, 220);
@@ -1533,7 +1576,10 @@ void main_draw(ui_t *u, canvas_t *cv)
 #if RADAR_ROUND
     if (p) round_card(u, cv, p);
     else if (menu_up(u)) round_menu(u, cv);
-    else round_note(u, cv);
+    else {
+        round_note(u, cv);
+        update_note(u, cv);
+    }
 #else
     demo_card(u, cv);
     corners(u, cv);
@@ -1577,8 +1623,12 @@ int main_hit(const ui_t *u, int x, int y)
     if (menu_up(u) && y >= MENU_Y - 2 && y < MENU_Y + MENU_H + 2)
         for (int i = 0; i < MENU_N; i++) if (x >= menu_x(i) && x < menu_x(i) + MENU_W) return menu_hit(i);
     if (u->sel && in_box(x, y, SCX - CARD_W / 2, CARD_Y, CARD_W, CARD_H)) return HIT_PANEL;
+    note_box_t nb;
+    if (update_note_box(u, &nb) && in_box(x, y, nb.x - 6, nb.y - 6, nb.w + 12, nb.h + 12)) return HIT_NEWS;
     return HIT_SCOPE;
 #else
+    note_box_t nb;                                     // a finger is wide: the note answers round it too
+    if (update_note_box(u, &nb) && in_box(x, y, nb.x - 6, nb.y - 6, nb.w + 12, nb.h + 12)) return HIT_NEWS;
     // the buttons over the map answer further out than they are drawn: a finger is wide, a
     // resistive panel is a few pixels off
 #if UI_WIFI_PAGE

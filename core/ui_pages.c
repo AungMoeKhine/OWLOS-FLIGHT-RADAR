@@ -75,28 +75,52 @@ void list_draw(ui_t *u, canvas_t *cv)
     bar(u, cv, L, 2, -1);
 }
 
-/* --- setup: one row a setting, what it does under its name --- */
+/* --- setup: one row a setting, what it does under its name. the rows sit in tabs: how it looks,
+ * what it shows and where from, the LED. the tabs are the bottom bar's buttons, BACK the last --- */
 
-enum { S_RANGE, S_DIST, S_ALT, S_UP, S_FLIP, S_LABELS, S_THEME, S_LOOK, S_MAP, S_SOURCE, S_SERVER, S_HOME, S_WIFI, S_TOUCH,
-       S_ABOUT, S_ROWS };
+enum { S_RANGE, S_GROUND, S_WATCH, S_DIST, S_ALT, S_UP, S_FLIP, S_LABELS, S_THEME, S_LOOK, S_MAP, S_SOURCE, S_SERVER, S_HOME,
+       S_WIFI,
+#if RADAR_HAS_LED
+       S_LED_SOS, S_LED_RANGE, S_LED_UP, S_LED_DOWN, S_LED_NEAR, S_LED_NEAR_KM, S_LED_NODATA, S_LED_LEVEL, S_LED_HOLD,
+       S_LED_TEST, S_LED_RED,
+#endif
+       S_TOUCH, S_ABOUT, S_ROWS };
 enum { K_NUM, K_BTN, K_INFO };
+enum { T_VIEW, T_DATA, T_LED };
+#define TABS (RADAR_HAS_LED ? 3 : 2)
 
-static const struct { const char *label, *desc; int kind; } ROWS[S_ROWS] = {
-    { "RANGE",       "or drag inside the scope",     K_NUM },
-    { "DISTANCE",    "km, nautical miles or miles",  K_BTN },
-    { "ALTITUDE",    "feet or metres",               K_BTN },
-    { "MAP UP",      "or drag the scope's rim",      K_NUM },
-    { "SCREEN",      "mounted upside down?",         K_BTN },
-    { "LABELS",      "names beside the planes",      K_BTN },
-    { "COLOURS",     "five colour themes",           K_BTN },
-    { "LOOK",        "radar, flat map, map's colours", K_BTN },
-    { "MAP",         "OpenStreetMap under the scope", K_BTN },
-    { "DATA",        "free, or FR24 with a key", K_BTN },
-    { "FREE SERVER", "tried first, others back up", K_BTN },
-    { "HOME",        "",                             K_INFO },
-    { "WIFI",        "",                             UI_WIFI_PAGE ? K_BTN : K_INFO },
-    { "TOUCH",       "align the touch screen",       K_BTN },
-    { RADAR_NAME,    "",                             K_INFO },
+static const struct { const char *label, *desc; int kind, tab; } ROWS[S_ROWS] = {
+    { "RANGE",       "or drag inside the scope",     K_NUM, T_VIEW },
+    { "ON GROUND",   "planes parked or taxiing",     K_BTN, T_DATA },
+    { "WATCH",       "",                             UI_WIFI_PAGE ? K_BTN : K_INFO, T_DATA },   /* planes to follow */
+    { "DISTANCE",    "km, nautical miles or miles",  K_BTN, T_VIEW },
+    { "ALTITUDE",    "feet or metres",               K_BTN, T_VIEW },
+    { "MAP UP",      "or drag the scope's rim",      K_NUM, T_VIEW },
+    { "SCREEN",      "mounted upside down?",         K_BTN, T_VIEW },
+    { "LABELS",      "names beside the planes",      K_BTN, T_VIEW },
+    { "COLOURS",     "five colour themes",           K_BTN, T_VIEW },
+    { "LOOK",        "radar, flat map, map's colours", K_BTN, T_VIEW },
+    { "MAP",         "OpenStreetMap under the scope", K_BTN, T_VIEW },
+    { "DATA",        "free, or FR24 with a key",     K_BTN, T_DATA },
+    { "FREE SERVER", "tried first, others back up",  K_BTN, T_DATA },
+    { "HOME",        "",                             UI_WIFI_PAGE ? K_BTN : K_INFO, T_DATA },   /* typed on the WiFi keyboard */
+    { "WIFI",        "",                             UI_WIFI_PAGE ? K_BTN : K_INFO, T_DATA },
+#if RADAR_HAS_LED
+    /* the LED on the back (core/light.h): each event on or off, in the order they win */
+    { "SOS",         "7500 7600 7700 round home: red", K_BTN, T_LED },
+    { "IN RANGE",    "a watched plane comes: green", K_BTN, T_LED },
+    { "TAKE-OFF",    "a watched plane takes off: blue", K_BTN, T_LED },
+    { "LANDING",     "a watched plane lands: cyan",  K_BTN, T_LED },
+    { "ANY NEAR",    "any plane in the air near: white", K_BTN, T_LED },
+    { "HOW NEAR",    "from home, for ANY NEAR",      K_BTN, T_LED },
+    { "NO DATA",     "no WiFi or no answer: amber",  K_BTN, T_LED },
+    { "BRIGHTNESS",  "low for the night",            K_BTN, T_LED },
+    { "HOW LONG",    "till touched, 10 s, while it lasts", K_BTN, T_LED },
+    { "TEST",        "red, green, blue in turn",     K_BTN, T_LED },
+    { "RED ON",      "no red in TEST: the other",    K_BTN, T_LED },   /* GPIO 4 or 22: light.h */
+#endif
+    { "TOUCH",       "align the touch screen",       K_BTN, T_VIEW },
+    { "ABOUT",       "",                             RADAR_HAS_TOUCH ? K_BTN : K_INFO, T_DATA },   /* the version, the site */
 };
 
 #define SB_X  (PG_R - 84)                     /* the keys of a row */
@@ -104,22 +128,51 @@ static const struct { const char *label, *desc; int kind; } ROWS[S_ROWS] = {
 #define SK_H  (RADAR_ROUND ? 26 : 30)
 #define SK_Y  ((ROW_H - SK_H) / 2)
 
-int setup_rows(void) { return S_ROWS; }
+// the k-th row seen in the tab shown: its S_ number, -1 past the last
+static int row_at(const ui_t *u, int k)
+{
+    for (int i = 0; i < S_ROWS; i++) if (ROWS[i].tab == u->setup_tab && k-- == 0) return i;
+    return -1;
+}
 
-static int row_y(const ui_t *u, int i) { return LIST_Y0 + i * ROW_H - u->setup_scroll; }
+int setup_rows(const ui_t *u)
+{
+    int n = 0;
+    for (int i = 0; i < S_ROWS; i++) n += ROWS[i].tab == u->setup_tab;
+    return n;
+}
+
+static int row_y(const ui_t *u, int k) { return LIST_Y0 + k * ROW_H - u->setup_scroll; }
 
 int setup_hit(const ui_t *u, int x, int y)
 {
-    if (bar_hit(x, y, 1) == 0) return HIT_BAR;
+    int b = bar_hit(x, y, TABS + 1);
+    if (b >= 0) return HIT_BAR + b;
     if (y < LIST_Y0 || y > BAR_Y - 3) return HIT_NONE;
-    int i = (y - LIST_Y0 + u->setup_scroll) / ROW_H;
-    if (i < 0 || i >= S_ROWS || x < SB_X - 4) return HIT_NONE;
+    int i = row_at(u, (y - LIST_Y0 + u->setup_scroll) / ROW_H);
+    if (i < 0 || x < SB_X - 4) return HIT_NONE;
     if (ROWS[i].kind == K_NUM) return x < SB_X + SB_W + 2 ? HIT_SDEC + i : HIT_SINC + i;
     if (ROWS[i].kind == K_BTN) return HIT_SBTN + i;
     return HIT_NONE;
 }
 
 int setup_repeats(int hit) { return hit >= HIT_SDEC && hit < HIT_SBTN; }
+
+#if RADAR_HAS_LED
+// the LED event a row switches on and off, -1 for the rows that are not one
+static int led_event(int i)
+{
+    switch (i) {
+    case S_LED_SOS:    return LIGHT_SOS;
+    case S_LED_RANGE:  return LIGHT_RANGE;
+    case S_LED_UP:     return LIGHT_UP;
+    case S_LED_DOWN:   return LIGHT_DOWN;
+    case S_LED_NEAR:   return LIGHT_NEAR;
+    case S_LED_NODATA: return LIGHT_NODATA;
+    default:           return -1;
+    }
+}
+#endif
 
 static void value_text(const ui_t *u, int i, char *b, int sz)
 {
@@ -128,6 +181,7 @@ static void value_text(const ui_t *u, int i, char *b, int sz)
     b[0] = 0;
     switch (i) {
     case S_RANGE:  fmt_dist(u, range_km(c), b, sz); break;
+    case S_GROUND: snprintf(b, (size_t)sz, c->ground ? "SHOW" : "HIDE"); break;
     case S_DIST:   snprintf(b, (size_t)sz, "%s", DU[c->dist_unit < 3 ? c->dist_unit : 0]); break;
     case S_ALT:    snprintf(b, (size_t)sz, c->alt_unit ? "M" : "FT"); break;
     case S_UP:     if (c->up) snprintf(b, (size_t)sz, "%03d\xC2\xB0", c->up); else snprintf(b, (size_t)sz, "NORTH"); break;
@@ -140,6 +194,27 @@ static void value_text(const ui_t *u, int i, char *b, int sz)
     case S_SERVER: snprintf(b, (size_t)sz, "%s", SERVER_NAME[c->server < FREE_SERVERS ? c->server : 0]); break;
     case S_TOUCH:  snprintf(b, (size_t)sz, "ALIGN"); break;
     case S_WIFI:   snprintf(b, (size_t)sz, u->net.configured ? "CHANGE" : "SET UP"); break;
+    case S_HOME:   snprintf(b, (size_t)sz, "CHANGE"); break;
+    case S_WATCH:  snprintf(b, (size_t)sz, u->watch.n ? "CHANGE" : "SET UP"); break;
+    case S_ABOUT:  if (ui_update(u)) snprintf(b, (size_t)sz, "NEW %s", u->newest); else snprintf(b, (size_t)sz, "OPEN"); break;
+#if RADAR_HAS_LED
+    case S_LED_SOS: case S_LED_RANGE: case S_LED_UP: case S_LED_DOWN: case S_LED_NEAR: case S_LED_NODATA:
+        snprintf(b, (size_t)sz, u->light.on[led_event(i)] ? "ON" : "OFF");
+        break;
+    case S_LED_NEAR_KM: snprintf(b, (size_t)sz, "%d %s", light_near_units(&u->light), DU[c->dist_unit < 3 ? c->dist_unit : 0]); break;
+    case S_LED_LEVEL: {
+        static const char *const L[LIGHT_LEVELS] = { "LOW", "MID", "HIGH" };
+        snprintf(b, (size_t)sz, "%s", L[u->light.level < LIGHT_LEVELS ? u->light.level : LIGHT_MID]);
+        break;
+    }
+    case S_LED_HOLD: {
+        static const char *const H[LIGHT_HOLDS] = { "TOUCH", "10 S", "WHILE" };
+        snprintf(b, (size_t)sz, "%s", H[u->light.hold < LIGHT_HOLDS ? u->light.hold : LIGHT_TOUCH]);
+        break;
+    }
+    case S_LED_TEST: snprintf(b, (size_t)sz, "TEST"); break;
+    case S_LED_RED:  snprintf(b, (size_t)sz, "GPIO %d", light_red_gpio(&u->light)); break;
+#endif
     default: break;
     }
 }
@@ -161,8 +236,8 @@ void setup_draw(ui_t *u, canvas_t *cv)
     if (ya <= yb) {
         canvas_t lc = { cv->px + (ya - cv->y0) * GFX_W, ya, yb - ya + 1, cv->helper };
         char v[32], d[112];
-        for (int i = 0; i < S_ROWS; i++) {
-            int y = row_y(u, i);
+        for (int k = 0, i; (i = row_at(u, k)) >= 0; k++) {
+            int y = row_y(u, k);
             if (!gfx_touches(&lc, y, y + ROW_H)) continue;
             gfx_hline(&lc, PG_L + 6, PG_R - 7, y + ROW_H - 1, C_QUIET, 90);
             font_text(&lc, RADAR_ROUND ? &FONT_SMALL : &FONT_MEDIUM, PG_L + 10, y + 4, ROWS[i].label,
@@ -171,14 +246,26 @@ void setup_draw(ui_t *u, canvas_t *cv)
             if (i == S_HOME) {
                 if (u->cfg.place[0]) snprintf(d, sizeof d, "%s%s%s, %.3f %.3f", u->cfg.place, u->cfg.country[0] ? ", " : "",
                                               u->cfg.country, (double)u->cfg.lat, (double)u->cfg.lon);
-                else snprintf(d, sizeof d, "%.4f %.4f, from the site", (double)u->cfg.lat, (double)u->cfg.lon);
+                else snprintf(d, sizeof d, UI_WIFI_PAGE ? "%.4f %.4f" : "%.4f %.4f, from the site", (double)u->cfg.lat,
+                              (double)u->cfg.lon);
                 desc = d;
             } else if (i == S_WIFI) {
                 if (!u->net.configured) snprintf(d, sizeof d, UI_WIFI_PAGE ? "not set: SET UP, or from the site" : "not set: send it from the site");
                 else snprintf(d, sizeof d, "%s, %s", u->net.ssid, u->net.wifi ? u->net.ip : "not connected");
                 desc = d;
-            } else if (i == S_ABOUT) {
-                snprintf(d, sizeof d, "FR24 key: %s", u->net.has_key ? "stored" : "none");
+            } else if (i == S_WATCH) {                  // what the planes on it are doing
+                const watchlist_t *w = &u->watch;
+                if (!w->n) snprintf(d, sizeof d, UI_WIFI_PAGE ? "planes to follow: none" : "from the site");
+                else snprintf(d, sizeof d, RADAR_ROUND ? "%d: %d flying, %d near" : "%d set, %d flying, %d in range", w->n,
+                              watch_count(w, WATCH_AIR), watch_near(w));   // the round glass has a short row
+                desc = d;
+            } else if (i == S_ABOUT) {                  // the version, and what the site has
+                const char *v = ui_version ? ui_version : "?";
+                int n = !u->newest[0] ? snprintf(d, sizeof d, "version %s", v)
+                      : ui_update(u) ? snprintf(d, sizeof d, "version %s, %s on the site", v, u->newest)
+                      : snprintf(d, sizeof d, "version %s, the newest", v);
+                if (!RADAR_HAS_TOUCH && n > 0 && n < (int)sizeof d)   // no ABOUT to open: the key here
+                    snprintf(d + n, sizeof d - (size_t)n, ", FR24 key %s", u->net.has_key ? "stored" : "none");
                 desc = d;
             }
             value_text(u, i, v, sizeof v);
@@ -200,18 +287,25 @@ void setup_draw(ui_t *u, canvas_t *cv)
                 button_font(&lc, SB_X, y + SK_Y, 2 * SB_W + 4, SK_H, v, pressed ? 2 : 0, &FONT_SMALL);
             }
         }
-        int total = S_ROWS * ROW_H, view = y1 - LIST_Y0;
-        int th = view * view / total, ty = LIST_Y0 + (view - th) * u->setup_scroll / (total - view);
-        gfx_fill(&lc, PG_R - 3, ty, 2, th, C_QUIET, 200);
+        int total = setup_rows(u) * ROW_H, view = y1 - LIST_Y0;
+        if (total > view) {                            // a tab that fits has no scroll bar
+            int th = view * view / total, ty = LIST_Y0 + (view - th) * u->setup_scroll / (total - view);
+            gfx_fill(&lc, PG_R - 3, ty, 2, th, C_QUIET, 200);
+        }
     }
     page_header(cv, "SETUP", RADAR_ROUND ? NULL : "DRAG TO SCROLL", C_FOCUS);
-    static const char *const L[1] = { "BACK" };
-    bar(u, cv, L, 1, -1);
+    static const char *const L[4] = { "VIEW", "DATA", RADAR_HAS_LED ? "LED" : "BACK", "BACK" };
+    bar(u, cv, L, TABS + 1, u->setup_tab);
 }
 
 void setup_act(ui_t *u, int hit, int longp, ui_cmd_t *cmd)
 {
-    if (hit == HIT_BAR) { if (!longp) u->view = VIEW_MAIN; return; }
+    if (hit >= HIT_BAR && hit < HIT_BAR + TABS) {     // a tab, from its top
+        u->setup_tab = hit - HIT_BAR;
+        u->setup_scroll = 0;
+        return;
+    }
+    if (hit == HIT_BAR + TABS) { if (!longp) u->view = VIEW_MAIN; return; }
     int i, dir = 0;
     if (hit >= HIT_SBTN) i = hit - HIT_SBTN;
     else if (hit >= HIT_SINC) { i = hit - HIT_SINC; dir = 1; }
@@ -222,6 +316,10 @@ void setup_act(ui_t *u, int hit, int longp, ui_cmd_t *cmd)
     switch (i) {
     case S_RANGE:
         c->range = range_step(c->range, dir);
+        cmd->refetch = 1;
+        break;
+    case S_GROUND:                                     // the fetch task takes them out of the sky
+        c->ground ^= 1;
         cmd->refetch = 1;
         break;
     case S_DIST: {                                     // the scope keeps about its size in the new unit
@@ -252,6 +350,28 @@ void setup_act(ui_t *u, int hit, int longp, ui_cmd_t *cmd)
     case S_SERVER: c->server = (uint8_t)((c->server + 1) % FREE_SERVERS); cmd->refetch = 1; break;
     case S_TOUCH:  ui_start_calibration(u); return;
     case S_WIFI:   wifi_open(u, cmd); return;
+    case S_HOME:   home_open(u); return;
+    case S_WATCH:  watch_open(u); return;
+    case S_ABOUT:  about_open(u); return;
+#if RADAR_HAS_LED
+    case S_LED_SOS: case S_LED_RANGE: case S_LED_UP: case S_LED_DOWN: case S_LED_NEAR: case S_LED_NODATA:
+        u->light.on[led_event(i)] ^= 1;
+        cmd->light = 1;                                // the LED's own settings, not fr_cfg_t
+        return;
+    case S_LED_NEAR_KM: u->light.near = (uint8_t)((u->light.near + 1) % LIGHT_NEARS); cmd->light = 1; return;
+    case S_LED_LEVEL: u->light.level = (uint8_t)((u->light.level + 1) % LIGHT_LEVELS); cmd->light = 1; cmd->light_test = 1; return;
+    case S_LED_HOLD:  u->light.hold = (uint8_t)((u->light.hold + 1) % LIGHT_HOLDS); cmd->light = 1; return;
+    case S_LED_TEST:
+        cmd->light_test = 1;
+        toast(u, "LED: RED, GREEN, BLUE");
+        return;
+    case S_LED_RED:                                    // the other pin, and the test shows if it is red now
+        u->light.red = (uint8_t)((u->light.red + 1) % LIGHT_REDS);
+        cmd->light = 1;
+        cmd->light_test = 1;
+        toast(u, "LED: RED, GREEN, BLUE");
+        return;
+#endif
     default: return;
     }
     cmd->cfg = 1;

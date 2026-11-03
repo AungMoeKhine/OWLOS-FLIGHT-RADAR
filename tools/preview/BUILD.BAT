@@ -27,11 +27,18 @@ cd /d "%~dp0"
 if not exist build\%DISP% mkdir build\%DISP%
 rem the map's tiles from OpenStreetMap, fetched once by curl (ground.inc)
 if not exist tiles mkdir tiles
-cl /nologo /O2 /W3 /utf-8 /std:c11 /D_CRT_SECURE_NO_WARNINGS /DRADAR_DISPLAY=%NUM% ^
+rem the version, as the firmware takes it: the first "## " line of CHANGES.md
+set VER=
+for /f "tokens=2" %%v in ('findstr /b /c:"## " ..\..\CHANGES.md') do if not defined VER set VER=%%v
+if "%VER%"=="" (
+  echo no version in CHANGES.md: its first "## " line should be one, like ## 0.3
+  exit /b 1
+)
+cl /nologo /O2 /W3 /utf-8 /std:c11 /D_CRT_SECURE_NO_WARNINGS /DRADAR_DISPLAY=%NUM% /DFLIGHT_VERSION=\"%VER%\" ^
    /Fobuild\%DISP%\ /Febuild\%DISP%\preview.exe ^
    preview.c ..\..\core\sky.c ..\..\core\demo.c ..\..\core\gfx.c ..\..\core\font.c ^
-   ..\..\core\ui.c ..\..\core\ui_scope.c ..\..\core\ui_pages.c ..\..\core\ui_wifi.c ^
-   ..\..\core\map.c ..\..\core\png_decode.c ^
+   ..\..\core\ui.c ..\..\core\ui_scope.c ..\..\core\ui_pages.c ..\..\core\ui_wifi.c ..\..\core\ui_about.c ^
+   ..\..\core\qr_site.c ..\..\core\map.c ..\..\core\png_decode.c ..\..\core\watch.c ..\..\core\light.c ^
    ..\..\core\font_small.c ..\..\core\font_medium.c ..\..\core\font_large.c ..\..\core\font_huge.c
 if errorlevel 1 exit /b 1
 if not exist %OUT% mkdir %OUT%

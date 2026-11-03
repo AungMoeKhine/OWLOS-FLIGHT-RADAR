@@ -17,6 +17,10 @@ int  store_load_cal(touch_cal_t *cal);
 void store_save_cal(const touch_cal_t *cal);
 int  store_load_screen(void);                  // -1: never picked
 void store_save_screen(int profile);
+void store_load_watch(char *text, int cap);    // the watch list as typed, "" none
+void store_save_watch(const char *text);
+void store_load_light(light_cfg_t *c);         // what lights the LED, the defaults if none was kept
+void store_save_light(const light_cfg_t *c);
 /* how long this run has lasted, s, saved once a minute: the next start says how long the run
  * before it was, whatever ended it (a reset by the USB line or a power cut too) */
 uint32_t store_load_ran(void);

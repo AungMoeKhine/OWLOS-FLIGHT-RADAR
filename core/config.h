@@ -51,4 +51,20 @@
 /* the RPi LCD has no touch: BOOT does what it can there, the site sends the rest */
 #define RADAR_HAS_TOUCH RADAR_TOUCH_CAL
 
+/* the RGB LED on the back: the 2.8" and the 3.5" CYD (firmware/main/board.h has its pins) */
+#define RADAR_HAS_LED (RADAR_DISPLAY == DISPLAY_ILI9341_320x240 || RADAR_DISPLAY == DISPLAY_ST7796_480x320)
+
 #define RADAR_NAME "OWLOS FLIGHTS"
+
+/* the board, as ABOUT says it */
+#if RADAR_DISPLAY == DISPLAY_ILI9341_320x240
+#define RADAR_BOARD "2.8\" CYD, 320x240"
+#elif RADAR_DISPLAY == DISPLAY_ST7796_480x320
+#define RADAR_BOARD "3.5\" CYD, ST7796 480x320"
+#elif RADAR_DISPLAY == DISPLAY_ILI9486_480x320
+#define RADAR_BOARD "3.5\" RPI LCD, ILI9486 480x320"
+#elif RADAR_DISPLAY == DISPLAY_GC9A01_240x240
+#define RADAR_BOARD "1.28\" ROUND, GC9A01"
+#else
+#define RADAR_BOARD "E-PAPER"
+#endif
