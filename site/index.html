@@ -76,6 +76,12 @@
   .radios label { flex-direction: row; align-items: flex-start; gap: 8px; color: var(--focus); font-size: 15px; }
   .radios small { display: block; color: var(--dim); font-size: 13px; }
   .note { font-size: 13px; color: var(--dim); }
+  /* what FIND and USE MY LOCATION found, under the home's fields: the list under SEND is out of sight there */
+  .found { margin: 10px 0 0; font: 14px/1.5 "Cascadia Mono", Consolas, monospace; color: var(--dim); }
+  .found:empty { display: none; }
+  .found.ok { color: var(--good); }
+  .found.bad { color: var(--bad); }
+  .found.wait { color: var(--warn); }
   .actions { grid-column: 1 / -1; display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
   #status { grid-column: 1 / -1; margin: 0; padding: 0; list-style: none; font: 14px/1.6 "Cascadia Mono", Consolas, monospace; }
   #status li::before { content: "> "; color: var(--line); }
@@ -113,12 +119,6 @@
     color: var(--warn); font: 700 14px "Cascadia Mono", Consolas, monospace; letter-spacing: 1px; text-decoration: none;
   }
   .boot-tag:hover { background: rgba(255, 184, 72, .1); }
-  /* the test banner, for the hour after a new version goes up: out with its block and its script lines */
-  .testing {
-    margin: 0 0 22px; padding: 16px 20px; border: 2px solid var(--warn); border-radius: 12px; background: rgba(255, 184, 72, .07);
-  }
-  .testing h2 { margin: 0 0 8px; font: 700 30px/1.25 "Cascadia Mono", Consolas, monospace; letter-spacing: 1px; color: var(--warn); }
-  .testing p { margin: 0; color: var(--focus); font-size: 18px; }
   footer { margin-top: 36px; color: var(--dim); font-size: 14px; }
   .newest { margin: 0 0 10px; color: var(--dim); }
   .newest b { color: var(--prim); font-family: "Cascadia Mono", Consolas, monospace; }
@@ -129,20 +129,11 @@
   @media (max-width: 720px) {
     form, .actions, .boot { grid-template-columns: 1fr; }
     header h1 { font-size: 26px; }
-    .testing h2 { font-size: 22px; }
   }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <!-- the test banner: up for the hour after a new version goes up, then out with .testing in the
-       style and its lines in the script. the time is when the workflow put this page up -->
-  <div class="testing" role="status">
-    <h2>WE ARE TESTING THE NEW VERSION, 0.3</h2>
-    <p><span id="testing-when">Give us about an hour.</span> You can flash it now, but the test is still
-       going on. Thank you for understanding.</p>
-  </div>
-
   <header>
     <h1>OWLOS Flight Radar</h1>
     <p>The planes around your home on an ESP32 board with a screen: each one a silhouette turned the way it
@@ -300,18 +291,20 @@
           <label>Town
             <span class="pw">
               <input id="place" type="text" maxlength="39" spellcheck="false" placeholder="found by itself">
-              <button id="lookup" type="button" class="btn quiet" title="the nearest town and its country, from OpenStreetMap">FIND</button>
+              <button id="lookup" type="button" class="btn quiet" title="a town you typed: its point; no town: the nearest one to the numbers (OpenStreetMap)">FIND</button>
             </span>
           </label>
           <label>Country
             <input id="country" type="text" maxlength="31" spellcheck="false" placeholder="found by itself">
           </label>
         </div>
+        <p id="found" class="found" aria-live="polite"></p>
         <p class="note">The middle of the scope, kept on the board as you type it. Till you send one the board
           sits in Trenčín, Slovakia; leave the numbers empty and it keeps the home it has. The plane network only hears it rounded to about a kilometre: enough to say
-          where to look, not where you live. The town and its country come from
-          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>, asked with
-          the same rounded point; leave them empty and the board asks for them itself.</p>
+          where to look, not where you live. <b>FIND</b> looks a town you type up on
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> and puts its
+          point in the numbers; with no town typed, it names the nearest one to the numbers, asked with the same rounded
+          point. Leave the town and the country empty and the board asks for them itself.</p>
       </fieldset>
 
       <fieldset>
@@ -673,17 +666,23 @@ for (const r of document.querySelectorAll('input[name=src]'))
   r.onchange = () => { $('keyrow').hidden = source() !== 'fr24'; };
 function source() { return document.querySelector('input[name=src]:checked').value; }
 
+// FIND and USE MY LOCATION answer under the home's fields
+function near(text, kind) {
+  $('found').textContent = text;
+  $('found').className = 'found ' + (kind || '');
+}
+
 $('locate').onclick = () => {
-  if (!navigator.geolocation) { say('This browser can\'t tell where you are: type the numbers in.', 'bad'); return; }
-  say('Asking the browser where you are...', 'wait');
+  if (!navigator.geolocation) { near('This browser can\'t tell where you are: type the numbers in.', 'bad'); return; }
+  near('Asking the browser where you are...', 'wait');
   navigator.geolocation.getCurrentPosition(
     p => {
       $('lat').value = p.coords.latitude.toFixed(4);
       $('lon').value = p.coords.longitude.toFixed(4);
-      say('Home set from the browser\'s location.', 'ok');
+      near('Home set from the browser\'s location.', 'ok');
       if (!$('place').value || named) lookup();      // a name we found before is replaced, one you typed is not
     },
-    e => say('No location: ' + (e.code === 1 ? 'the browser was not allowed to say.' : 'it could not find out.') + ' Type the numbers in.', 'bad'),
+    e => near('No location: ' + (e.code === 1 ? 'the browser was not allowed to say.' : 'it could not find out.') + ' Type the numbers in.', 'bad'),
     { timeout: 15000, maximumAge: 600000 });
 };
 
@@ -694,25 +693,66 @@ function clip(s, n) {
   return out;
 }
 
-/* the nearest town from OpenStreetMap's Nominatim, asked with the point rounded to 0.01 degree
- * (like the board asks the plane network), in English: the board's font is Latin first */
+/* FIND, from OpenStreetMap's Nominatim, in English: the board's font is Latin first. a town you
+ * typed is looked up for its point, as the board's own FIND does; with none typed, the nearest town
+ * to the numbers is named, asked with the point rounded to 0.01 degree (like the board asks the
+ * plane network) */
 let named = false;
+const town_of = a => a.city || a.town || a.village || a.municipality || a.hamlet || a.county || a.state || '';
 async function lookup() {
+  const typed = named ? '' : $('place').value.trim();
+  if (typed) {
+    await search(typed);
+    return;
+  }
   const lat = parseFloat($('lat').value), lon = parseFloat($('lon').value);
-  if (!(lat >= -90 && lat <= 90) || !(lon >= -180 && lon <= 180)) { say('Type the latitude and longitude first.', 'bad'); return; }
+  if (!(lat >= -90 && lat <= 90) || !(lon >= -180 && lon <= 180)) { near('Type a town, or the latitude and longitude.', 'bad'); return; }
   const u = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=en&lat=' +
             lat.toFixed(2) + '&lon=' + lon.toFixed(2);
+  near('Asking OpenStreetMap for the nearest town...', 'wait');
   try {
     const j = await (await fetch(u)).json();
     const a = j.address || {};
-    const name = a.city || a.town || a.village || a.municipality || a.hamlet || a.county || a.state || '';
-    if (!name && !a.country) { say('OpenStreetMap knows no town there: type a name if you want one.', 'wait'); return; }
+    const name = town_of(a);
+    if (!name && !a.country) { near('OpenStreetMap knows no town there: type a name if you want one.', 'wait'); return; }
     $('place').value = clip(name, 39);
     $('country').value = clip(a.country || '', 31);
     named = true;
-    say('Named it ' + [$('place').value, $('country').value].filter(Boolean).join(', ') + ' (OpenStreetMap).', 'ok');
+    near('Named it ' + [$('place').value, $('country').value].filter(Boolean).join(', ') + ' (OpenStreetMap).', 'ok');
   } catch (e) {
-    say('OpenStreetMap did not answer: type a name if you want one.', 'wait');
+    near('OpenStreetMap did not answer: type a name if you want one.', 'wait');
+  }
+}
+
+/* a postcode is the same number in many countries (10115 alone is Santo Domingo): one with a digit
+ * in it is looked for in the country's field first, then anywhere. a town is looked for as it is */
+async function search(text) {
+  near('Looking for ' + text + ' on OpenStreetMap...', 'wait');
+  const ask = async q => (await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1' +
+                                      '&accept-language=en&q=' + encodeURIComponent(q))).json();
+  try {
+    let found = [];
+    const land = $('country').value.trim();
+    if (/[0-9]/.test(text) && land) {
+      found = await ask(text + ', ' + land);
+      if (!found.length) {
+        await new Promise(r => setTimeout(r, 1100));   // Nominatim takes a request a second
+      }
+    }
+    if (!found.length) {
+      found = await ask(text);
+    }
+    if (!found.length) { near('OpenStreetMap does not know ' + text + ': try another spelling, or type the numbers in.', 'bad'); return; }
+    const f = found[0], a = f.address || {};
+    $('lat').value = (+f.lat).toFixed(4);
+    $('lon').value = (+f.lon).toFixed(4);
+    $('place').value = clip(town_of(a) || f.name || text, 39);
+    $('country').value = clip(a.country || '', 31);
+    named = true;
+    near('Found ' + [$('place').value, $('country').value].filter(Boolean).join(', ') + ' at ' +
+         $('lat').value + ' ' + $('lon').value + ' (OpenStreetMap).', 'ok');
+  } catch (e) {
+    near('OpenStreetMap did not answer: try again, or type the numbers in.', 'bad');
   }
 }
 $('lookup').onclick = lookup;
@@ -829,17 +869,6 @@ fetch('CHANGES.md', { cache: 'no-cache' }).then(r => r.ok ? r.text() : null).the
   }
 }).catch(() => {});
 
-/* the test banner: its hour in the reader's own clock. the workflow writes the time in; a page not
-   built by it keeps "about an hour" */
-{
-  const built = new Date('@BUILT@');
-  if (!isNaN(built)) {
-    const hm = d => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });   // English words, the reader's time zone
-    $('testing-when').textContent = 'From ' + hm(built) + ' to about ' + hm(new Date(built.getTime() + 3600e3)) +
-      ' on ' + built.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }) + ', by your clock.';
-  }
-}
-
 /* --- the board on the serial port --- */
 class Board {
   async open() {
@@ -869,9 +898,11 @@ class Board {
       }
     } catch (e) { /* the port went away: close() says so */ }
   }
+  // a newline first: bytes garbled while the board restarts at connect would otherwise glue onto
+  // the command, and the board takes only a line that starts with OWLOS. it skips empty lines
   async send(line) {
     const w = this.port.writable.getWriter();
-    await w.write(utf8.encode(line + '\n'));
+    await w.write(utf8.encode('\n' + line + '\n'));
     w.releaseLock();
   }
   // the first line starting with one of the prefixes, or null after ms

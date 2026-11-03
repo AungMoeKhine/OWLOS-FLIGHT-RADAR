@@ -103,8 +103,7 @@ jobs:
           printf '{"version":"%s"}\n' "$VER" > public/version.json
           mkdir -p public/shots && cp -r shots/. public/shots/
           bash .github/make-manifests.sh public/fw "$VERSION"
-          # @BUILT@: when this page goes up, for the test banner
-          sed -i "s|@VERSION@|$VERSION|g; s|@BUILT@|$(date -u +%Y-%m-%dT%H:%MZ)|g" public/index.html
+          sed -i "s|@VERSION@|$VERSION|g" public/index.html
           find public -type f | sort
 
       - uses: actions/configure-pages@v5
