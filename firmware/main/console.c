@@ -5,39 +5,76 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
+#include "soc/soc_caps.h"
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+#include "hal/usb_serial_jtag_ll.h"
+#endif
 
 static const char *TAG = "console";
 static console_line_fn s_fn;
+static SemaphoreHandle_t s_one;                        // one line at a time, whichever port it came on
 
-static void console_task(void *arg)
+typedef struct { char line[1024]; int n; } line_t;
+
+static void take(line_t *l, uint8_t ch)
+{
+    if (ch == '\r') return;
+    if (ch == '\n') {
+        l->line[l->n] = 0;
+        if (l->n && s_fn) {
+            xSemaphoreTake(s_one, portMAX_DELAY);
+            s_fn(l->line);
+            xSemaphoreGive(s_one);
+        }
+        l->n = 0;
+        return;
+    }
+    if (l->n < (int)sizeof l->line - 1) l->line[l->n++] = (char)ch;
+    else l->n = 0;                                     // too long for anything we know: drop it
+}
+
+static void uart_task(void *arg)
 {
     (void)arg;
-    static char line[1024];
-    int n = 0;
+    static line_t l;
     for (;;) {
         uint8_t ch;
-        if (uart_read_bytes(UART_NUM_0, &ch, 1, pdMS_TO_TICKS(1000)) != 1) continue;
-        if (ch == '\r') continue;
-        if (ch == '\n') {
-            line[n] = 0;
-            if (n && s_fn) s_fn(line);
-            n = 0;
-            continue;
-        }
-        if (n < (int)sizeof line - 1) line[n++] = (char)ch;
-        else n = 0;                                    // too long for anything we know: drop it
+        if (uart_read_bytes(UART_NUM_0, &ch, 1, pdMS_TO_TICKS(1000)) == 1) take(&l, ch);
     }
 }
+
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+/* the chip's own USB (S3, C3, C5): the log already goes out there as well as on UART0, this reads
+ * what comes in. on the ES3C28P it is the only USB there is, the NM-CYD-C5 has it beside its CH340.
+ * no driver: it would take over the log's way out too. the chip holds the host back while its
+ * 64 bytes are full, so looking every 10 ms loses nothing */
+static void usb_task(void *arg)
+{
+    (void)arg;
+    static line_t l;
+    for (;;) {
+        uint8_t buf[64];
+        int n = usb_serial_jtag_ll_rxfifo_data_available() ? (int)usb_serial_jtag_ll_read_rxfifo(buf, sizeof buf) : 0;
+        for (int i = 0; i < n; i++) take(&l, buf[i]);
+        if (!n) vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+#endif
 
 void console_start(console_line_fn fn)
 {
     s_fn = fn;
+    s_one = xSemaphoreCreateMutex();
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+    xTaskCreate(usb_task, "console usb", 4096, NULL, 3, NULL);
+#endif
     // the log keeps writing to UART0 as it always did, this only adds the receiving side
     if (uart_driver_install(UART_NUM_0, 2048, 0, 0, NULL, 0) != ESP_OK) {
-        ESP_LOGE(TAG, "no UART driver: settings can't come from the site");
+        ESP_LOGE(TAG, "no UART driver: settings can't come from the site on UART0");
         return;
     }
-    xTaskCreate(console_task, "console", 4096, NULL, 3, NULL);
+    xTaskCreate(uart_task, "console", 4096, NULL, 3, NULL);
 }
 
 // finds "key": in a flat object and leaves p after the colon

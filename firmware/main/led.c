@@ -1,10 +1,67 @@
 /* the RGB LED on the back of the CYD: three LEDC channels on a timer of their own, the backlight's
  * (lcd_spi.c, timer 0 and channel 0) is left alone. each colour is pulled to ground to light, so
- * the outputs are inverted: duty 0 is dark. what it shows is core/light.c's */
+ * the outputs are inverted: duty 0 is dark. a WS2812 instead on the boards that have one (board.h
+ * PIN_LED_WS2812). what it shows is core/light.c's */
 #include "led.h"
 #include "board.h"
 
-#if RADAR_HAS_LED
+#if RADAR_HAS_LED && defined(PIN_LED_WS2812)
+/* one WS2812 on one pin: 24 bits, green red blue, the highest first. a bit is a high and a low,
+ * 0.3 + 0.9 us a 0 and 0.9 + 0.3 us a 1, sent by the RMT. 50 us low and it takes them: the screen
+ * task changes it at most once a frame, far more apart than that */
+#include <string.h>
+#include "driver/rmt_tx.h"
+#include "esp_log.h"
+#include "soc/soc_caps.h"
+
+static const char *TAG = "led";
+static rmt_channel_handle_t s_ch;
+static rmt_encoder_handle_t s_bits;
+static uint8_t s_now[3];
+static uint8_t s_grb[3];                               // the RMT reads it after rmt_transmit is back
+static int s_ready;
+
+void led_init(int red_gpio)
+{
+    (void)red_gpio;                                    // one pin for all three colours here
+    rmt_tx_channel_config_t ch = {
+        .gpio_num = PIN_LED_WS2812,
+        .clk_src = RMT_CLK_SRC_DEFAULT,
+        .resolution_hz = 10 * 1000 * 1000,             // a tick is 0.1 us
+        .mem_block_symbols = SOC_RMT_MEM_WORDS_PER_CHANNEL,   // 24 bits fit
+        .trans_queue_depth = 1,
+    };
+    rmt_bytes_encoder_config_t bits = {
+        .bit0 = { .level0 = 1, .duration0 = 3, .level1 = 0, .duration1 = 9 },
+        .bit1 = { .level0 = 1, .duration0 = 9, .level1 = 0, .duration1 = 3 },
+        .flags.msb_first = 1,
+    };
+    esp_err_t e = rmt_new_tx_channel(&ch, &s_ch);
+    if (e == ESP_OK) e = rmt_new_bytes_encoder(&bits, &s_bits);
+    if (e == ESP_OK) e = rmt_enable(s_ch);
+    if (e != ESP_OK) { ESP_LOGE(TAG, "WS2812 on GPIO %d: %s", PIN_LED_WS2812, esp_err_to_name(e)); return; }
+    s_ready = 1;
+    s_now[0] = 1;                                      // not what led_set gets first: dark goes out too
+    const uint8_t dark[3] = { 0, 0, 0 };
+    led_set(dark);
+    ESP_LOGI(TAG, "WS2812 LED on GPIO %d", PIN_LED_WS2812);
+}
+
+void led_red(int gpio) { (void)gpio; }                 // a CYD setting, nothing to move here
+
+void led_set(const uint8_t rgb[3])
+{
+    if (!s_ready || !memcmp(rgb, s_now, 3)) return;
+    memcpy(s_now, rgb, 3);
+    rmt_tx_wait_all_done(s_ch, 20);                    // the last one out first: s_grb is read while it goes
+    s_grb[0] = rgb[1];
+    s_grb[1] = rgb[0];
+    s_grb[2] = rgb[2];
+    const rmt_transmit_config_t once = { .loop_count = 0 };
+    rmt_transmit(s_ch, s_bits, s_grb, sizeof s_grb, &once);
+}
+
+#elif RADAR_HAS_LED
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "esp_log.h"

@@ -10,7 +10,7 @@
  *   DISP_LCD_SPI   esp_lcd SPI panel IO, 8 bit commands (ILI9341, ST7796, GC9A01)
  *   DISP_ILI9486   raw SPI, every byte padded to 16 bits (RPi LCD with shift registers)
  *   DISP_EPD       SSD1683 e-paper, bit-banged, 1 bit a pixel (core/paper.c)
- * touch: TOUCH_XPT_BITBANG, TOUCH_XPT_SPI (on the LCD bus), TOUCH_CST816, or none */
+ * touch: TOUCH_XPT_BITBANG, TOUCH_XPT_SPI (on the LCD bus), TOUCH_CST816, TOUCH_FT6336, or none */
 
 #if RADAR_DISPLAY == DISPLAY_ILI9341_320x240
 /* ESP32-2432S028R "cheap yellow display". the one this was written on, all of it works */
@@ -118,6 +118,102 @@
 #define CST816_ADDR    0x15
 #define PIN_BUTTON     9        // BOOT on the C3
 
+#elif RADAR_DISPLAY == DISPLAY_ES3C28P_320x240
+/* LCDWIKI ES3C28P, 2.8": ESP32-S3 N16R8, ILI9341V 240x320 IPS, FT6336G capacitive touch. pins
+ * from LCDWIKI's pin table and schematic (lcdwiki.com/2.8inch_ESP32-S3_Display), the same in
+ * Bruce's port (BruceDevices/firmware, boards/ES3C28P, said to be run on one). NOT run on one
+ * here: a viewer asked for it and has one. its USB-C is the S3's own USB, no bridge chip: the
+ * site talks to it there (console.c) */
+#define DISP_LCD_SPI   1
+#define LCD_CHIP_ILI9341 1
+#define PIN_LCD_SCLK  12
+#define PIN_LCD_MOSI  11
+#define PIN_LCD_MISO  13
+#define PIN_LCD_DC    46
+#define PIN_LCD_CS    10
+#define PIN_LCD_RST   (-1)      // on the chip's own reset
+#define PIN_LCD_BL    45        // high = lit
+#define LCD_SPI_HZ    (40 * 1000 * 1000)   // what LCDWIKI's and Bruce's setups use
+#define LCD_MADCTL    0x28      // MV|BGR: Bruce's landscape. the other one is the screen turned over
+#define DISP_STRIP    24
+/* BGR with the colours inverted, in LCDWIKI's own start-up and in both ports: the CYD's v2 is
+ * that. the CYD's three start-ups stay in the build all the same, BOOT in the first seconds goes
+ * through them as on the CYD, in case this panel is another */
+#define LCD_PROFILES   3
+#define LCD_ORDER      { 1, 0, 2 }
+#define TOUCH_FT6336   1
+#define FT6336_ADDR    0x38
+#define PIN_I2C_SDA   16
+#define PIN_I2C_SCL   15
+#define PIN_T_RST     18
+#define PIN_BUTTON     0        // BOOT
+#define PIN_LED_WS2812 42       // one WS2812B, green red blue (Bruce's order)
+
+#elif RADAR_DISPLAY == DISPLAY_NMCYDC5_320x240
+/* NM-CYD-C5, 2.8" in the CYD's form: ESP32-C5-WROOM-1 N16R8, ST7789 320x240, XPT2046 resistive.
+ * pins from its maker's schematic SCH_NM-CYD-C5-v1.0 (RockBase-iot/NM-CYD-C5, gone from GitHub,
+ * kept in its forks), the same in Bruce's port (boards/nm-cyd-c5) and in other projects on it.
+ * NOT run on one here: a viewer asked for it and has one. two USB-C: one through a CH340 to
+ * UART0, one the C5's own USB, the site talks to it on either (console.c). the screen, the touch
+ * and the SD card share one SPI bus */
+#define DISP_LCD_SPI   1
+#define LCD_CHIP_ST7789 1
+#define PIN_LCD_SCLK   6
+#define PIN_LCD_MOSI   7
+#define PIN_LCD_MISO   2        // the touch reads it
+#define PIN_LCD_DC    24
+#define PIN_LCD_CS    23
+#define PIN_LCD_RST   (-1)      // on the chip's own reset
+#define PIN_LCD_BL    25        // high = lit
+#define PIN_SD_CS     10        // the SD slot on the same bus: held up, so a card in it keeps quiet
+/* the maker's demos run 20 MHz, one project saw stripes at 40 on this shared bus and runs 30,
+ * another runs 40. 30 asked, the SPI driver takes the nearest it can make below */
+#define LCD_SPI_HZ    (30 * 1000 * 1000)
+#define LCD_MADCTL    0xA0      // MY|MV, RGB: the landscape most of them use, the other is the screen turned over
+#define DISP_STRIP    24
+/* no inversion, every source agrees. RGB or BGR they do not: RGB in the maker's Arduino setup and
+ * in most ports, BGR in its MicroPython demo. both are in the build, RGB first, BOOT in the first
+ * seconds switches (lcd_spi.c) */
+#define LCD_PROFILES   2
+#define LCD_ORDER      { 0, 1 }
+#define TOUCH_XPT_SPI  1
+#define PIN_T_CS       1
+#define PIN_T_IRQ      3        // on the schematic; most ports ask the chip instead, touch.c finds out
+#define PIN_BUTTON    28        // BOOT
+#define PIN_LED_WS2812 27       // one WS2812C behind a level shifter, green red blue (Bruce's order)
+
+#elif RADAR_DISPLAY == DISPLAY_CROWADV28_320x240
+/* Elecrow CrowPanel Advance 2.8" HMI, ESP32-S3-WROOM-1 N16R8, ST7789 240x320 IPS, FT6336U
+ * capacitive touch. pins from Elecrow's repository (Elecrow-RD/CrowPanel-Advance-2.8-HMI-ESP32-AI-
+ * Display-320x240): its LovyanGFX setup in example/V1.0/Arduino_Code/lesson-03, checked against
+ * the nets of its V1.2 schematic, the same from V1.0 to V1.2. NOT run on one here: two viewers
+ * asked for it. two USB-C: one through a CH340K to UART0, one the S3's own USB, the site talks
+ * to it on either (console.c). the screen has its bus to itself, the SD card is on other pins */
+#define DISP_LCD_SPI   1
+#define LCD_CHIP_ST7789 1
+#define PIN_LCD_SCLK  42
+#define PIN_LCD_MOSI  39
+#define PIN_LCD_MISO  (-1)      // not wired, the screen is only written
+#define PIN_LCD_DC    41
+#define PIN_LCD_CS    40
+#define PIN_LCD_RST   (-1)      // a reset circuit of its own on the board
+#define PIN_LCD_BL    38        // high = lit, through a transistor
+/* Elecrow runs 80 MHz; these pins go through the GPIO matrix, 40 is what the other S3 runs */
+#define LCD_SPI_HZ    (40 * 1000 * 1000)
+#define LCD_MADCTL    0xA0      // MY|MV: Elecrow's landscape (LovyanGFX rotation 3), the other is the screen turned over
+#define DISP_STRIP    24
+/* an IPS panel: colours inverted, as Elecrow's setup has it (invert = true). BGR there too
+ * (rgb_order = false is LovyanGFX's BGR bit), so BGR first, RGB behind BOOT in case */
+#define LCD_INVERT     1
+#define LCD_PROFILES   2
+#define LCD_ORDER      { 1, 0 }
+#define TOUCH_FT6336   1
+#define FT6336_ADDR    0x38
+#define PIN_I2C_SDA   15        // the touch and the I2C socket on the side
+#define PIN_I2C_SCL   16
+#define PIN_T_RST     48        // TP_RST on the schematic; its TP_INT is 47, touch.c asks the chip instead
+#define PIN_BUTTON     0        // BOOT
+
 #elif RADAR_DISPLAY == DISPLAY_EPD_400x300 || RADAR_DISPLAY == DISPLAY_EPD_792x272
 /* Elecrow CrowPanel e-paper 4.2" (400x300) and 5.79" (792x272), ESP32-S3. NOT run on
  * hardware yet: panel pins and command sequences are ViewOwl's (ViewOwl.ESP32_EPD.Client),
@@ -148,8 +244,9 @@
  * pins on both (rzeldent/platformio-espressif32-sunton); on the 2.8" the Thermo Relay drives them.
  * red is GPIO 4 there and GPIO 22 on LCDWIKI's ESP32-32E boards (lcdwiki.com, E32R28T, E32R35T),
  * whose GPIO 4 switches the speaker's amplifier: the user picks, core/light.h LIGHT_RED_.
- * the 3.5" here is one of those (2026-11-03: red lit on 22 alone) */
-#if RADAR_HAS_LED
+ * the 3.5" here is one of those (2026-11-03: red lit on 22 alone). the boards with a WS2812 name
+ * its one pin above, PIN_LED_WS2812 */
+#if RADAR_HAS_LED && !defined(PIN_LED_WS2812)
 #define PIN_LED_G     16
 #define PIN_LED_B     17
 #endif
@@ -160,6 +257,8 @@
 // raw touch units across the screen, for the sanity check of a stored alignment
 #if TOUCH_CST816
 #define TOUCH_RAW_SPAN 240
+#elif TOUCH_FT6336
+#define TOUCH_RAW_SPAN 320      // it counts screen pixels, 240x320 standing
 #else
 #define TOUCH_RAW_SPAN 3700
 #endif

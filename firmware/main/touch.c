@@ -1,10 +1,11 @@
 /*
- * touch, three kinds:
+ * touch, four kinds:
  *  XPT2046 bit-banged on its own pins (the 2.8" CYD), or on the LCD's SPI bus (3.5" CYD).
  *    check pressure (Z1, Z2) first, a light press counts as nothing, otherwise the resistive
  *    panel invents taps. then 5 reads per axis, median.
- *  CST816 capacitive on I2C (round board). its axes may not match the screen, that's fine,
- *    the 5 cross alignment in ui.c sorts out swaps and mirrors for every kind
+ *  CST816 capacitive on I2C (round board), FT6336 the same way (ES3C28P). their axes may not
+ *    match the screen, that's fine, the 5 cross alignment in ui.c sorts out swaps and mirrors
+ *    for every kind
  *  GT911 capacitive on I2C (3.5" CYD, C version), asked for before the XPT2046 of the R version
  * boards without touch get tp_read() that never presses
  */
@@ -218,25 +219,48 @@ int tp_read(int *rx, int *ry)
     return pressed;
 }
 
-#elif TOUCH_CST816
+#elif TOUCH_CST816 || TOUCH_FT6336
+/* the CST816 (round board) and the FT6336 (ES3C28P, CrowPanel Advance) give the first finger
+ * the same way: from register 0x02 on, the count of fingers, X high and low, Y high and low */
 #include "i2c_bus.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#if TOUCH_FT6336
+#include "driver/gpio.h"
+#define TOUCH_ADDR FT6336_ADDR
+#define TOUCH_CHIP "FT6336"
+#else
+#define TOUCH_ADDR CST816_ADDR
+#define TOUCH_CHIP "CST816"
+#endif
 
 static i2c_master_dev_handle_t s_dev;
 
 void tp_init(void)
 {
+#if TOUCH_FT6336
+    // its reset is a GPIO of its own: held low a moment, then up, and the chip wants a while
+    // after that before it answers
+    gpio_config_t rst = { .pin_bit_mask = 1ULL << PIN_T_RST, .mode = GPIO_MODE_OUTPUT };
+    gpio_config(&rst);
+    gpio_set_level(PIN_T_RST, 0);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    gpio_set_level(PIN_T_RST, 1);
+    vTaskDelay(pdMS_TO_TICKS(300));
+#else
     // the expander let the touch out of reset in disp_init, give it a moment to wake
     vTaskDelay(pdMS_TO_TICKS(50));
-    if (!i2c_probe(CST816_ADDR)) {
-        ESP_LOGW(TAG, "nothing at 0x%02x, going on without touch (BOOT button still works)", CST816_ADDR);
+#endif
+    if (!i2c_probe(TOUCH_ADDR)) {
+        ESP_LOGW(TAG, "nothing at 0x%02x, going on without touch (BOOT button still works)", TOUCH_ADDR);
         return;
     }
-    s_dev = i2c_dev(CST816_ADDR);
+    s_dev = i2c_dev(TOUCH_ADDR);
+#if TOUCH_CST816
     // the CST816 dozes off after a few idle seconds and then ignores I2C untill touched. 0xFE = 1 keeps it awake
     i2c_master_transmit(s_dev, (const uint8_t[]){ 0xFE, 0x01 }, 2, 50);
-    ESP_LOGI(TAG, "CST816 at 0x%02x", CST816_ADDR);
+#endif
+    ESP_LOGI(TAG, TOUCH_CHIP " at 0x%02x", TOUCH_ADDR);
 }
 
 int tp_read(int *rx, int *ry)
@@ -244,7 +268,11 @@ int tp_read(int *rx, int *ry)
     if (!s_dev) return 0;
     uint8_t reg = 0x02, b[5];                     // finger count, X high, X low, Y high, Y low
     if (i2c_master_transmit_receive(s_dev, &reg, 1, b, sizeof b, 20) != ESP_OK) return 0;
-    if (!(b[0] & 0x0F)) return 0;
+    const int fingers = b[0] & 0x0F;
+    if (!fingers) return 0;
+#if TOUCH_FT6336
+    if (fingers > 2) return 0;                    // it knows two at most: more is a register not ready yet
+#endif
     *rx = ((b[1] & 0x0F) << 8) | b[2];
     *ry = ((b[3] & 0x0F) << 8) | b[4];
     return 1;

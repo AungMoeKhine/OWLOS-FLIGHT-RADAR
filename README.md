@@ -4,6 +4,8 @@
 
 **Flash it from the browser: [kirindenis.github.io/OWLOS-FLIGHT-RADAR](https://kirindenis.github.io/OWLOS-FLIGHT-RADAR/)**
 
+Questions, ideas, a photo of your board: [our group on Facebook](https://www.facebook.com/groups/OWLOS).
+
 The planes around your home on a small ESP32 board with a screen. Each plane is a silhouette turned the
 way it flies, coloured by its height, with a trail behind it. Tap one for its callsign, type, height and
 speed. The planes come from the free community ADS-B networks, or from Flightradar24 if you have a key.
@@ -38,6 +40,13 @@ The map under them comes from OpenStreetMap.
 - LCDWIKI's ESP32-32E boards, also sold by Elegoo: the 2.8" E32R28T takes the 2.8" CYD build and the
   3.5" E32R35T the 3.5" one, the screen and the touch are on the same pins. Only the LED's red is on
   another pin, see The LED.
+- **2.8" LCDWIKI ES3C28P**: ESP32-S3, ILI9341V 320x240, capacitive touch (FT6336). Its USB-C is the S3's
+  own. New, not run on one here yet: the pins come from LCDWIKI's schematic.
+- **2.8" NM-CYD-C5**: the CYD's form on an ESP32-C5, ST7789 320x240, resistive touch, two USB-C ports
+  (either works). New, not run on one here yet: the pins come from its maker's schematic.
+- **2.8" Elecrow CrowPanel Advance** (the 2.8" HMI ESP32 AI display): ESP32-S3, ST7789 320x240 IPS,
+  capacitive touch (FT6336), two USB-C ports (either works). New, not run on one here yet: the pins
+  come from Elecrow's examples and schematic.
 - **1.28" round** (Elecrow CrowPanel): ESP32-C3, GC9A01 240x240, capacitive touch.
 - **3.5" RPi LCD** (Waveshare RPi LCD (A) on the OWLOSAirQuality board): ESP32, ILI9486 480x320, no touch.
 
@@ -52,6 +61,10 @@ The map under them comes from OpenStreetMap.
 5. Boards with touch ask once for 5 crosses to be pressed, so the touch knows where the screen is.
 6. An update is the same button, with no to erase: the board keeps its WiFi, home, watch list and the
    rest.
+7. The site keeps every version from 0.2 on. The newest went wrong on your board? Step 1 has a list
+   to pick an older one, and the same buttons flash it; `?v=0.3` after the site's address picks one
+   from a link. An older version may not read all the settings a newer one saved: the WiFi stays,
+   the rest may need sending again.
 
 ## WiFi and home
 
@@ -170,17 +183,17 @@ The pictures are the 3.5" board, the 2.8" one has the same screens a little smal
 
 ### The LED
 
-- The 2.8" and 3.5" CYD have an RGB LED on the back. SET's LED tab has a row for each thing that lights
-  it, ON or OFF: **SOS** red and blinking fast, an emergency squawk (7500, 7600, 7700) round home; **IN
-  RANGE** green, a watched plane comes; **TAKE-OFF** blue; **LANDING** cyan; **ANY NEAR** white, any plane
-  in the air within **HOW NEAR** of home (1, 2, 5 or 10 km, or nautical miles, or miles); **NO DATA**
-  amber and steady, the WiFi set is not there or no answer. When two are lit, the first in that order
-  shows.
+- The 2.8" and 3.5" CYD have an RGB LED on the back, the ES3C28P and the NM-CYD-C5 a WS2812. SET's LED
+  tab has a row for each thing that lights it, ON or OFF: **SOS** red and blinking fast, an emergency
+  squawk (7500, 7600, 7700) round home; **IN RANGE** green, a watched plane comes; **TAKE-OFF** blue;
+  **LANDING** cyan; **ANY NEAR** white, any plane in the air within **HOW NEAR** of home (1, 2, 5 or 10 km,
+  or nautical miles, or miles); **NO DATA** amber and steady, the WiFi set is not there or no answer. When
+  two are lit, the first in that order shows.
 - **BRIGHTNESS**: low, mid or high. **HOW LONG**: till the screen is touched (a minute at most),
   10 seconds, or while it lasts. A touch on the screen puts it out. **TEST**: red, green, blue in turn.
-- **RED ON**: GPIO 4 or GPIO 22. The red one is on GPIO 4 on the CYD and on GPIO 22 on LCDWIKI's (and
-  Elegoo's) ESP32-32E boards, and nothing on the board tells which. No red in the test: tap it, the test
-  runs again on the other pin.
+- **RED ON**, the CYDs only: GPIO 4 or GPIO 22. The red one is on GPIO 4 on the CYD and on GPIO 22 on
+  LCDWIKI's (and Elegoo's) ESP32-32E boards, and nothing on the board tells which. No red in the test: tap
+  it, the test runs again on the other pin.
 - The site's step 2 has a few ready sets of them, the brightness, how long and the red one's pin.
 
 ### ABOUT and a new version
@@ -204,6 +217,8 @@ The pictures are the 3.5" board, the 2.8" one has the same screens a little smal
 - It is sold with three different screens. It starts as the USB-C one (v2), the one most boards have.
   Wrong colours or a mirrored picture: press **BOOT** in the first seconds after power on. It goes v2,
   v1 (micro USB), v3 (ST7789) and keeps the one you stop at.
+- The ES3C28P has the same three and starts as v2 too. The NM-CYD-C5 has two: RGB first, then BGR, for
+  red and blue swapped. The CrowPanel Advance has the same two, BGR first.
 
 ### The round glass
 
@@ -232,13 +247,19 @@ The firmware is ESP-IDF 5.5. The screen code in `core/` is plain C, the same fil
 and a PC preview.
 
 - `firmware/BUILD.BAT <screen> [COMx]` builds one screen's firmware (and flashes it to COMx). Screens:
-  `ili9341` (2.8" CYD, the default), `st7796` (3.5" CYD), `gc9a01` (round), `ili9486` (RPi LCD).
-  Each screen has its own build folder and sdkconfig.
-- `.github/workflows/pages.yml` builds all four in Espressif's ESP-IDF image and publishes the site
+  `ili9341` (2.8" CYD, the default), `st7796` (3.5" CYD), `gc9a01` (round), `ili9486` (RPi LCD),
+  `es3c28p`, `nmcydc5`, `crowadv28`. Each screen has its own build folder and sdkconfig.
+- `.github/workflows/pages.yml` builds them all in Espressif's ESP-IDF image and publishes the site
   with them on GitHub Pages, on every push to main.
 - The version is the first `## ` line of `CHANGES.md`: the firmware is built with it, and the site
   publishes it in `version.json` for the boards and shows the file as its history. A new version is a new
   section at the top of that file.
+- Each version's firmware is kept in a GitHub release of its own, `v0.4` and so on, a zip a board in it
+  (`.github/archive.sh`). Every build of a version makes its release again, the older ones are never
+  touched: to keep a build, give the next one a new number. A lower number than the newest release
+  stops the workflow before the site. The site takes the older versions from their releases into
+  `fw/<version>/` and lists them in `fw/versions.json`. 0.2 and 0.3 came before the archive: their
+  releases are made once from the runs that built them, `.github/archive-seed.txt`.
 - `tools/QrBake` (.NET 8) writes the site's address and its QR code into `core/qr_site.h` and `.c`.
 - `tools/preview/BUILD.BAT <screen>` (Visual Studio 2022) draws every page on the PC into `shots/`.
   `TOUR.BAT` films the how-to tour, `GIF.BAT` makes the GIF above from it (both with ffmpeg).
@@ -262,7 +283,7 @@ The site talks to the board over the USB cable at 115200 baud, a line each way. 
   `country`), `src`, whether a `key` is stored, `up`, `flip`, `theme`, `look`, `map`, `ground`, `watch`,
   `led`, `led_level`, `led_hold`, `led_near`, `led_red`, `version`, `newest` (the site's, `""` not heard
   yet), `uptime` and `ran` in seconds, `reset`, and `screen` on the
-  2.8" CYD. Never the password, never the key.
+  2.8" boards. Never the password, never the key.
 - `OWLOS SET {...}` with any of `ssid`, `pass`, `key`, `lat`, `lon`, `place`, `country`, `src` (`free` or
   `fr24`), `up` (degrees), `flip`, `theme` (0 to 4), `look` (0 radar, 1 map, 2 classic), `map`, `ground`
   (1 planes on the ground shown, 0 hidden), `watch` (`"EZY12AB, G-EUPT"`, `""` empties it), `led` (what
@@ -270,8 +291,8 @@ The site talks to the board over the USB cable at 115200 baud, a line each way. 
   (1, 2, 5 or 10 of the distance unit), `led_level` (0 low, 1 mid,
   2 high), `led_hold` (0 till touched, 1 10 s, 2 while it lasts), `led_red` (4 or 22, the red one's GPIO),
   `led_test` (1: red, green, blue once),
-  `screen` (0 v1, 1 v2, 2 v3). What is left out stays as it is. Answered with `OWLOS OK` or
-  `OWLOS ERR <why>`.
+  `screen` (0 v1, 1 v2, 2 v3; on the NM-CYD-C5 and the CrowPanel Advance 0 RGB, 1 BGR). What is left
+  out stays as it is. Answered with `OWLOS OK` or `OWLOS ERR <why>`.
 
 ## Data and licences
 

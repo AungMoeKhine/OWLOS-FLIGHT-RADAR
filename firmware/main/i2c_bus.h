@@ -1,4 +1,5 @@
-// the one I2C bus of a board: the round one's IO expander and touch chip, the 3.5" C's touch
+// the one I2C bus of a board: the round one's IO expander and touch chip, the 3.5" C's touch,
+// the ES3C28P's and the CrowPanel Advance's touch
 #pragma once
 #include "board.h"
 #ifdef PIN_I2C_SDA

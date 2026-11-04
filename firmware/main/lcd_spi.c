@@ -155,6 +155,34 @@ static const init_cmd_t INIT[] = {
 };
 #define CHIP "ST7796"
 
+#elif LCD_CHIP_ST7789
+/* ST7789 on the chip's own settings, as the CYD's v3: inverted on an IPS panel (CrowPanel
+ * Advance), not on the NM-CYD-C5's (board.h LCD_INVERT). its two profiles differ in the colour
+ * order only, BGR is bit 3 of MADCTL */
+#ifndef LCD_INVERT
+#define LCD_INVERT 0
+#endif
+#define ST7789_INV (LCD_INVERT ? 0x21 : 0x20)                 /* inversion on or off */
+static const init_cmd_t INIT[] = {
+    { 0x01, 0, { 0 }, 150 },                                  /* software reset */
+    { 0x11, 0, { 0 }, 120 },                                  /* sleep out */
+    { 0x3A, 1, { 0x55 }, 10 },                               /* 16 bits a pixel */
+    { 0x36, 1, { LCD_MADCTL }, 0 },                          /* landscape, RGB */
+    { ST7789_INV, 0, { 0 }, 0 },                             /* inversion as the panel wants it */
+    { 0x13, 0, { 0 }, 10 },                                  /* normal display mode */
+    { 0x29, 0, { 0 }, 20 },                                  /* display on */
+};
+static const init_cmd_t INIT_BGR[] = {
+    { 0x01, 0, { 0 }, 150 },
+    { 0x11, 0, { 0 }, 120 },
+    { 0x3A, 1, { 0x55 }, 10 },
+    { 0x36, 1, { LCD_MADCTL | 0x08 }, 0 },                   /* the same, BGR */
+    { ST7789_INV, 0, { 0 }, 0 },
+    { 0x13, 0, { 0 }, 10 },
+    { 0x29, 0, { 0 }, 20 },
+};
+#define CHIP "ST7789"
+
 #elif LCD_CHIP_GC9A01
 static const init_cmd_t INIT[] = {
     { 0xEF, 0, { 0 }, 0 },
@@ -247,10 +275,13 @@ void disp_backlight(int percent)
 typedef struct { const char *name; const init_cmd_t *cmds; size_t n; } profile_t;
 #define PROFILE(name, t) { name, t, sizeof t / sizeof t[0] }
 static const profile_t PROFILE_LIST[] = {
-#if LCD_PROFILES
+#if LCD_PROFILES && LCD_CHIP_ILI9341
     PROFILE("ILI9341 V1", INIT),
     PROFILE("ILI9341 V2", INIT_V2),
     PROFILE("ST7789 V3", INIT_V3),
+#elif LCD_PROFILES && LCD_CHIP_ST7789
+    PROFILE("ST7789 RGB", INIT),
+    PROFILE("ST7789 BGR", INIT_BGR),
 #else
     PROFILE(CHIP, INIT),
 #endif
@@ -388,6 +419,12 @@ void disp_init(void)
     }
 #if LCD_CHIP_GC9A01
     expander_power_on();
+#endif
+#ifdef PIN_SD_CS
+    // an SD slot on the screen's bus: its chip select up for good, or a card in it answers too
+    gpio_config_t sd = { .pin_bit_mask = 1ULL << PIN_SD_CS, .mode = GPIO_MODE_OUTPUT };
+    gpio_config(&sd);
+    gpio_set_level(PIN_SD_CS, 1);
 #endif
 
     const size_t strip_bytes = GFX_W * DISP_STRIP * sizeof(uint16_t);

@@ -1,42 +1,76 @@
 # Boards people asked for
 
-Asked for in the groups after the first posts. Most of them are not built yet: each needs its screen
-and touch chips and their pins, and a board here to try or someone with one who tests a build.
+Asked for in the groups after the first posts. Each one needs its screen and touch chips and their
+pins, and a board here to try or someone with one who tests a build. Built means a build of its own
+on the site; none of the built ones here has been run on that board yet unless it says so.
 
 ## An ESP32-C5 board, model not named
 
 - Asked: will it work on the C5 board?
-- The chip is no problem: ESP-IDF 5.5, which the firmware is built with, supports the ESP32-C5. It is a
-  single core RISC-V like the C3, faster, with WiFi on 2.4 and 5 GHz.
-- Missing: which board, which screen and touch.
+- The chip is no problem: the NM-CYD-C5 below is built for it. ESP-IDF 5.5.0 still calls the C5 a
+  preview target (BUILD.BAT passes --preview), the later 5.5 releases the site is built with do not.
+- If it is the NM-CYD-C5, that build. Another C5 board found: Waveshare ESP32-C5-Touch-LCD-2.8, an
+  ST7789 with its reset and backlight behind a CH32V003 co-processor and a CST3530 touch: not built.
+- Missing: which board it is.
 
-## NM-CYD-C5
+## NM-CYD-C5: built 2026-11-03, not run on one yet
 
-- A 2.8" board in the CYD's form on the ESP32-C5, dual band WiFi 6.
-- From its owner: ESP32-C5-WROOM-1 with 16 MB flash and 8 MB PSRAM, a 320x240 LCD, a touch screen, two
-  USB-C ports, one the C5's own USB, one through a USB to UART chip.
-- Others' words, not checked: a shop listing names the screen ST7789 and the touch resistive; a CNX
-  Software note says resistive too. If so the touch is likely an XPT2046 as on the CYD, and the ST7789 is
-  the 2.8" CYD v3's screen, already one of its variants.
-- Its maker's repository is named RockBase-iot/NM-CYD-C5 on GitHub; it did not open when looked at, and
-  no pin list was found anywhere.
-- Missing: the pins of the screen, the touch, the backlight, and the LED if there is one.
-- Needs: the esp32c5 target, these pins, its own card on the site. The 8 MB PSRAM gives room the
-  classic ESP32 does not have: taller strips, the map's picture off the heap.
-- The one who asked has the board and offered to test a build.
+- A 2.8" board in the CYD's form: ESP32-C5-WROOM-1 N16R8 (16 MB flash, 8 MB quad PSRAM), ST7789
+  320x240, XPT2046 resistive touch, two USB-C: one through a CH340C to UART0 (TX 11, RX 12), one the
+  C5's own USB (D- 13, D+ 14).
+- Its maker's repository RockBase-iot/NM-CYD-C5 is gone from GitHub; its forks keep it, with the
+  schematic SCH_NM-CYD-C5-v1.0 (for one, github.com/michaelhenry/NM-CYD-C5, Documention/2-sch).
+  The same pins in Bruce's port (github.com/BruceDevices/firmware, boards/nm-cyd-c5) and in other
+  projects on it.
+- Screen on SPI: SCLK 6, MOSI 7, MISO 2, CS 23, DC 24, reset on the chip's own, backlight 25 (high =
+  lit). The touch on the same bus: CS 1, its pen interrupt on 3 by the schematic (most ports ask the chip
+  instead). The SD card on the same bus too: CS 10, held up by the firmware. BOOT is GPIO 28.
+- Built with: no inversion (every source agrees), landscape MADCTL 0xA0, RGB first and BGR as the
+  second screen profile (the maker's own demos disagree), SPI at 30 MHz (one project saw stripes at
+  40 on this shared bus). The console listens on both USB ports.
+- Not driven yet: the WS2812 LED on GPIO 27 (GRB), the AHT20 sensor on I2C 9/8, the speaker on 26.
+- The one who asked has the board and offered to test a build. To learn from it: RGB or BGR, which
+  landscape is upright, whether the touch's pen interrupt is there, whether 30 MHz stays clean.
 
-## LCDWIKI ES3C28P
+## LCDWIKI ES3C28P: built 2026-11-03, not run on one yet
 
 - In the asker's words: same form factor as the CYD, with more RAM. They flashed a basic ESP32-2432S
-  from a Chromebook with no trouble, then this one could not be flashed.
-- 2.8", ESP32-S3 with 16 MB flash and 8 MB PSRAM, ILI9341V 240x320 IPS, FT6336G capacitive touch.
-- Pins, from https://www.lcdwiki.com/2.8inch_ESP32-S3_Display: LCD CS 10, DC 46, SCLK 12, MOSI 11,
-  MISO 13, backlight 45, reset on the chip's own; touch on I2C SDA 16, SCL 15, INT 17, RST 18.
-- Today the site turns it down: the 2.8" build is for the classic ESP32 only.
-- Needs: the S3 target, these pins, an FT6336 driver (a simple I2C one), its own card on the site.
-  Colours and orientation unknown without the board: BOOT in the first seconds could go through the
-  variants, as on the 2.8" CYD.
+  from a Chromebook with no trouble, then this one could not be flashed: the site had no S3 build, and
+  ESP Web Tools turns down a chip no build is for.
+- 2.8", ESP32-S3R8 (8 MB octal PSRAM) with 16 MB flash, ILI9341V 240x320 IPS, FT6336G capacitive touch.
+- Pins, from LCDWIKI's pin table and schematic (https://www.lcdwiki.com/2.8inch_ESP32-S3_Display) and
+  the same in Bruce's port (boards/ES3C28P, said to be run on one): LCD CS 10, DC 46, SCLK 12, MOSI 11,
+  MISO 13, backlight 45 (high = lit), reset on the chip's own; touch at 0x38 on I2C SDA 16, SCL 15,
+  INT 17, RST 18. BOOT is GPIO 0.
+- Its USB-C is the S3's own USB, no bridge chip: the console listens there too now.
+- Built with: BGR and colours inverted (LCDWIKI's own start-up and both ports agree, the CYD's v2),
+  landscape MADCTL 0x28 (Bruce's), the CYD's three profiles behind BOOT in case, SPI at 40 MHz.
+- Not driven yet: the WS2812 LED on GPIO 42 (GRB), the ES8311 codec and the speaker (amp enable on 1,
+  low = on), the SD card, the battery on 9.
 - The one who asked was asked whether they would try a test build.
+
+## Elecrow CrowPanel Advance 2.8": built 2026-11-04, not run on one yet
+
+- Asked for twice, the second time with its Amazon page: "ELECROW ESP32 Display 320x240, 2.8" HMI
+  Advanced ESP32-S3 IPS Touch Display, Support AI Speech Interaction". Elecrow's own name: CrowPanel
+  Advance 2.8 HMI ESP32 AI Display. Not the plain CrowPanel 2.8 HMI (classic ESP32, ILI9341V, XPT2046).
+- ESP32-S3-WROOM-1 N16R8 (16 MB flash, 8 MB octal PSRAM), ST7789 240x320 IPS, FT6336U capacitive touch,
+  two USB-C: one through a CH340K to UART0, one the S3's own USB.
+- Pins from Elecrow's repository (github.com/Elecrow-RD/CrowPanel-Advance-2.8-HMI-ESP32-AI-Display-320x240):
+  its working LovyanGFX setup (example/V1.0/Arduino_Code/lesson-03) and the nets of the V1.2
+  schematic agree. Screen on SPI: SCLK 42, MOSI 39, no MISO, CS 40, DC 41, reset by the board's own
+  circuit, backlight 38 (high = lit). Touch at 0x38 on I2C SDA 15, SCL 16, INT 47, RST 48. BOOT is
+  GPIO 0. The same pins on V1.0, V1.1 (new amplifier, its mute on 21) and V1.2 (new buttons).
+- Built with: colours inverted and BGR (Elecrow's invert = true and rgb_order = false, which is
+  LovyanGFX's BGR bit), RGB as the second screen profile; landscape MADCTL 0xA0 (LovyanGFX's rotation
+  3, the one Elecrow's demos run); SPI at 40 MHz (Elecrow runs 80). The S3 LCD boards' sdkconfig.
+- Doubts: a GT911 at 0x5D is started in one of Elecrow's sketches, left over from another board: the
+  touch there is read through LovyanGFX's FT5x06 at 0x38, and the wiki says 0x38. If a board has no
+  touch at all, that is the first thing to look at. GPIO 14 is a TFT_PWR net on the schematic, Elecrow's
+  examples never drive it, so neither does this build.
+- Not driven: no user LED on it; the speaker (NS4168, I2S 11 12 13), the microphone (9 and 10 behind a
+  switch on 45), the buzzer on 8, the SD card (4 5 6 7), the wireless module socket.
+- To learn from whoever tries it: colours right as it starts, which landscape is upright, the touch.
 
 ## Elegoo ESP32-32E 2.8" (LCDWIKI E32R28T)
 
@@ -50,3 +84,25 @@ and touch chips and their pins, and a board here to try or someone with one who 
   site, GPIO 4 by default.
 - LCDWIKI's 3.5" twin, E32R35T, is the same story: every pin as the 3.5" build, red on IO22. The 3.5"
   here turned out to be one: red lit with GPIO 22 alone held low (2026-11-03).
+
+## Others on sale, nobody asked yet
+
+Looked up 2026-11-03 to see what else people build things like this on. Pins are in the board JSONs
+of github.com/rzeldent/platformio-espressif32-sunton, in Bruce's boards/ and the makers' wikis;
+check each against a second source before a build. From the easiest port to the hardest:
+
+- Pins only, chips the firmware knows: Guition JC2432W328C (the capacitive 2.8" CYD, ESP32, ST7789 or
+  ILI9341 by batch, CST816/CST820 at 0x15 on SDA 33 SCL 32, backlight 27, looks the most common now);
+  ESP32-2432S024 C/R/N (2.4", ILI9341, CST820 or XPT2046); ESP32-2432S032 C/R/N (3.2", ST7789, GT911 or
+  XPT2046); Elecrow CrowPanel 2.8 and 2.4 ESP32 HMI, the plain ones (ILI9341V, XPT2046 on the LCD
+  bus, CS 33); the CrowPanel Advance 2.4 (S3, Elecrow's examples are shared with the 2.8's);
+  ESP32-2424S012C (round, ESP32-C3, GC9A01 and CST816, near the CrowPanel 1.28); WT32-SC01 (3.5"
+  ST7796, FT6336, ESP32 with PSRAM); LilyGO T-Deck (S3, ST7789 320x240, keyboard).
+- A new touch chip, a power chip or an IO expander in the way: Waveshare ESP32-S3-Touch-LCD-2.8
+  (CST328), Waveshare ESP32-C5-Touch-LCD-2.8 (CST3530, reset and backlight on a CH32V003), M5Stack
+  Core2 (AXP192) and CoreS3 (AXP2101, AW9523), Waveshare ESP32-S3-Touch-LCD-3.5 (TCA9554, AXP2101),
+  Elecrow CrowPanel 3.5 (ILI9488 takes 18-bit pixels over SPI).
+- Another bus, esp_lcd has it: LilyGO T-Display S3 (8-bit parallel, 170x320, very common),
+  ESP32-2432S022C (8-bit parallel), Guition JC3248W535 (3.5" QSPI AXS15231B, cheap and common, some
+  batches ignore the window commands: whole frames from PSRAM), JC4827W543 (QSPI NV3041A).
+- RGB parallel 800x480 from PSRAM: Sunton ESP32-8048S043/050/070, ESP32-4827S043, JC8048W550C.

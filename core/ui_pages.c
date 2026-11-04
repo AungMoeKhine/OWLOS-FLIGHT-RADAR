@@ -82,7 +82,10 @@ enum { S_RANGE, S_GROUND, S_WATCH, S_DIST, S_ALT, S_UP, S_FLIP, S_LABELS, S_THEM
        S_WIFI,
 #if RADAR_HAS_LED
        S_LED_SOS, S_LED_RANGE, S_LED_UP, S_LED_DOWN, S_LED_NEAR, S_LED_NEAR_KM, S_LED_NODATA, S_LED_LEVEL, S_LED_HOLD,
-       S_LED_TEST, S_LED_RED,
+       S_LED_TEST,
+#if RADAR_LED_RED_PIN
+       S_LED_RED,
+#endif
 #endif
        S_TOUCH, S_ABOUT, S_ROWS };
 enum { K_NUM, K_BTN, K_INFO };
@@ -117,7 +120,9 @@ static const struct { const char *label, *desc; int kind, tab; } ROWS[S_ROWS] = 
     { "BRIGHTNESS",  "low for the night",            K_BTN, T_LED },
     { "HOW LONG",    "till touched, 10 s, while it lasts", K_BTN, T_LED },
     { "TEST",        "red, green, blue in turn",     K_BTN, T_LED },
+#if RADAR_LED_RED_PIN
     { "RED ON",      "no red in TEST: the other",    K_BTN, T_LED },   /* GPIO 4 or 22: light.h */
+#endif
 #endif
     { "TOUCH",       "align the touch screen",       K_BTN, T_VIEW },
     { "ABOUT",       "",                             RADAR_HAS_TOUCH ? K_BTN : K_INFO, T_DATA },   /* the version, the site */
@@ -213,7 +218,9 @@ static void value_text(const ui_t *u, int i, char *b, int sz)
         break;
     }
     case S_LED_TEST: snprintf(b, (size_t)sz, "TEST"); break;
+#if RADAR_LED_RED_PIN
     case S_LED_RED:  snprintf(b, (size_t)sz, "GPIO %d", light_red_gpio(&u->light)); break;
+#endif
 #endif
     default: break;
     }
@@ -365,12 +372,14 @@ void setup_act(ui_t *u, int hit, int longp, ui_cmd_t *cmd)
         cmd->light_test = 1;
         toast(u, "LED: RED, GREEN, BLUE");
         return;
+#if RADAR_LED_RED_PIN
     case S_LED_RED:                                    // the other pin, and the test shows if it is red now
         u->light.red = (uint8_t)((u->light.red + 1) % LIGHT_REDS);
         cmd->light = 1;
         cmd->light_test = 1;
         toast(u, "LED: RED, GREEN, BLUE");
         return;
+#endif
 #endif
     default: return;
     }

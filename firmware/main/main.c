@@ -690,7 +690,7 @@ static void on_line(const char *line)
     if (json_num(j, "led_red", &v) && (red = light_red_index((int)v)) >= 0) { light.red = (uint8_t)red; lit = 1; }
     if (json_num(j, "led_test", &v) && v) s_light_test = 1;   // nothing kept: the screen task shows it
 #if LCD_PROFILES
-    if (json_num(j, "screen", &v) && v >= 0 && v < LCD_PROFILES) s_screen_set = (int)v;   // the 2.8" CYD's revision: 0 v1, 1 v2, 2 v3
+    if (json_num(j, "screen", &v) && v >= 0 && v < LCD_PROFILES) s_screen_set = (int)v;   // the screen's start-up, board.h LCD_PROFILES: on the CYD 0 v1, 1 v2, 2 v3
 #endif
     if (c.lat < -90 || c.lat > 90 || c.lon < -180 || c.lon > 180) { printf("OWLOS ERR home is not on Earth\n"); return; }
     store_save_secrets(&sec);

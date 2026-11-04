@@ -1,8 +1,10 @@
 # OWLOS Flight Radar - build the firmware and put it on GitHub Pages, next to the page that
 # flashes it and sends the board its settings (ESP Web Tools and Web Serial, Chrome/Edge).
 #
-# One job a screen in Espressif's own ESP-IDF 5.5 image, then one job puts the page, the
-# screenshots and the binaries together and publishes them. The e-paper boards are not here yet.
+# One job a screen in Espressif's own ESP-IDF 5.5 image. When they all built, one job keeps this
+# version's firmware in a GitHub release of its own (.github/archive.sh), then one job puts the page,
+# the screenshots, these binaries and the older versions' from their releases together and
+# publishes them. The e-paper boards are not here yet.
 #
 # Needs once: repo Settings -> Pages -> Source: "GitHub Actions".
 
@@ -13,10 +15,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# each job asks for what it needs on top of this
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -34,6 +35,9 @@ jobs:
           - { disp: st7796,  num: 2, target: esp32 }
           - { disp: ili9486, num: 3, target: esp32 }
           - { disp: gc9a01,  num: 4, target: esp32c3 }
+          - { disp: es3c28p, num: 7, target: esp32s3 }
+          - { disp: nmcydc5, num: 8, target: esp32c5 }
+          - { disp: crowadv28, num: 9, target: esp32s3 }
     steps:
       - uses: actions/checkout@v4
 
@@ -72,14 +76,56 @@ jobs:
             firmware/build_${{ matrix.disp }}/sdkconfig
           retention-days: 90
 
+  # only when every board built: a release holds a whole version. a version's release is made
+  # again by each build of it, the older versions' are never touched: to keep a build, give the
+  # next one a new number in CHANGES.md. a lower number than the archive's newest stops here
+  release:
+    name: Keep this version
+    needs: firmware
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # the releases and their tags
+      actions: read         # the files of the runs in archive-seed.txt
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # for the build number
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: fw-*
+          path: fw
+          merge-multiple: true
+
+      - name: The versions from before the archive, once
+        run: bash .github/archive.sh seed .github/archive-seed.txt
+
+      - name: This version
+        run: |
+          VER=$(sed -n 's/^## \([0-9][0-9.]*\).*/\1/p' CHANGES.md | head -n 1)
+          [ -n "$VER" ] || { echo "no version in CHANGES.md: its first '## ' line should be one" >&2; exit 1; }
+          bash .github/archive.sh this fw "$VER" "$VER, build $(git rev-list --count HEAD) ($(git rev-parse --short HEAD))"
+
+  # goes on when a board did not build (the others are published as before), not when the release
+  # job turned the version down, not in a run a newer push cancelled
   site:
     name: Flasher site
-    needs: firmware
-    if: always()
+    needs: [ firmware, release ]
+    if: ${{ !cancelled() && needs.release.result != 'failure' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -93,7 +139,8 @@ jobs:
 
       - name: Put the page together
         # the version is CHANGES.md's first "## " line, as the firmware takes it (firmware/CMakeLists.txt).
-        # version.json is what the boards ask for, CHANGES.md the history the page shows
+        # version.json is what the boards ask for, CHANGES.md the history the page shows. the older
+        # versions go to fw/<version>/, fw/versions.json lists them all for the page
         run: |
           VER=$(sed -n 's/^## \([0-9][0-9.]*\).*/\1/p' CHANGES.md | head -n 1)
           [ -n "$VER" ] || { echo "no version in CHANGES.md: its first '## ' line should be one" >&2; exit 1; }
@@ -103,6 +150,7 @@ jobs:
           printf '{"version":"%s"}\n' "$VER" > public/version.json
           mkdir -p public/shots && cp -r shots/. public/shots/
           bash .github/make-manifests.sh public/fw "$VERSION"
+          bash .github/archive.sh site public/fw "$VER" "$VERSION"
           sed -i "s|@VERSION@|$VERSION|g" public/index.html
           find public -type f | sort
 

@@ -14,6 +14,9 @@ for dir in "$FW"/*/; do
     st7796)  name='3.5" CYD (ST7796 480x320)';                family='ESP32' ;;
     ili9486) name='3.5" RPi LCD on OWLOSAirQuality (ILI9486)'; family='ESP32' ;;
     gc9a01)  name='1.28" round (GC9A01 240x240)';              family='ESP32-C3' ;;
+    es3c28p) name='2.8" LCDWIKI ES3C28P (ESP32-S3, ILI9341V)'; family='ESP32-S3' ;;
+    nmcydc5) name='2.8" NM-CYD-C5 (ESP32-C5, ST7789)';          family='ESP32-C5' ;;
+    crowadv28) name='2.8" Elecrow CrowPanel Advance (ESP32-S3, ST7789)'; family='ESP32-S3' ;;
     *) echo "skipping unknown folder $disp"; continue ;;
   esac
   parts=""

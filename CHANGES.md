@@ -2,6 +2,18 @@
 
 What changed in each version of OWLOS Flight Radar, the newest first. The first `## ` line below is the
 version: the firmware is built with it, the site publishes it, and a board compares its own with it.
+The site keeps the firmware of each version: a new number here keeps the one before it as it was.
+
+## 0.4
+
+- Three more boards, each asked for by people who have one, none run here yet: the LCDWIKI ES3C28P
+  (ESP32-S3, ILI9341V, capacitive touch), the NM-CYD-C5 (ESP32-C5, ST7789, resistive touch) and
+  Elecrow's CrowPanel Advance 2.8" (ESP32-S3, ST7789 IPS, capacitive touch). Tell us how it goes.
+- The site talks to a board over the chip's own USB too, not only through a CH340: the ES3C28P has no
+  other.
+- The WS2812 LED on the ES3C28P and the NM-CYD-C5 lights for the same things as the CYDs' RGB one.
+- The site keeps every version from 0.2 on: step 1 can flash an older one, for a board the newest went
+  wrong on.
 
 ## 0.3
 

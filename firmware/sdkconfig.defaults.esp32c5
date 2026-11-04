@@ -1,0 +1,10 @@
+# ESP32-C5 boards (NM-CYD-C5): one RISC-V core at 240 MHz, WiFi on 2.4 and 5 GHz. the one asked for
+# has 16 MB of flash and 8 MB of PSRAM; the CYD's 4 MB layout runs on it as it is
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+# PSRAM when it is there, asked for by name only (heap_caps_malloc with MALLOC_CAP_SPIRAM): plain
+# malloc stays in the chip's own RAM, as on the boards without it
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_IGNORE_NOTFOUND=y
+CONFIG_SPIRAM_USE_CAPS_ALLOC=y

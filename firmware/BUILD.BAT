@@ -6,6 +6,8 @@ rem   BUILD.BAT st7796            build for another display
 rem   BUILD.BAT st7796 COM4       same, and flash it
 rem displays: ili9341 (2.8" CYD, all three revisions, the default)  st7796 (3.5" CYD)
 rem           ili9486 (RPi LCD on OWLOSAirQuality)  gc9a01 (round 1.28", ESP32-C3)
+rem           es3c28p (LCDWIKI ES3C28P 2.8", ESP32-S3)  nmcydc5 (NM-CYD-C5 2.8", ESP32-C5)
+rem           crowadv28 (Elecrow CrowPanel Advance 2.8", ESP32-S3)
 rem           epd400 (4.2" e-paper, S3)  epd792 (5.79" e-paper, S3)
 rem each display gets its own build folder and sdkconfig, so switching doesnt rebuild everything
 setlocal
@@ -23,8 +25,11 @@ if /i "%DISP%"=="ili9486" (set NUM=3& set TARGET=esp32)
 if /i "%DISP%"=="gc9a01"  (set NUM=4& set TARGET=esp32c3)
 if /i "%DISP%"=="epd400"  (set NUM=5& set TARGET=esp32s3)
 if /i "%DISP%"=="epd792"  (set NUM=6& set TARGET=esp32s3)
+if /i "%DISP%"=="es3c28p" (set NUM=7& set TARGET=esp32s3)
+if /i "%DISP%"=="nmcydc5" (set NUM=8& set TARGET=esp32c5)
+if /i "%DISP%"=="crowadv28" (set NUM=9& set TARGET=esp32s3)
 if "%NUM%"=="" (
-  echo unknown display %DISP%, pick one of: ili9341 st7796 ili9486 gc9a01 epd400 epd792
+  echo unknown display %DISP%, pick one of: ili9341 st7796 ili9486 gc9a01 es3c28p nmcydc5 crowadv28 epd400 epd792
   exit /b 1
 )
 rem the CYD keeps the plain build folder and sdkconfig it always had
@@ -58,8 +63,12 @@ if exist "%BDIR%\CMakeCache.txt" (
   )
 )
 set ARGS=-B %BDIR% "-DSDKCONFIG=%SDK%" -DIDF_TARGET=%TARGET% -DRADAR_DISPLAY=%NUM%
+rem ESP-IDF 5.5.0 still calls the C5 a preview target, later 5.5 releases (the site's build) do not.
+rem the flag lets 5.5.0 build it and changes nothing for the other chips
+set PREVIEW=
+if /i "%TARGET%"=="esp32c5" set PREVIEW=--preview
 if "%PORT%"=="" (
-  idf.py %ARGS% build
+  idf.py %PREVIEW% %ARGS% build
 ) else (
-  idf.py %ARGS% -p %PORT% build flash monitor
+  idf.py %PREVIEW% %ARGS% -p %PORT% build flash monitor
 )

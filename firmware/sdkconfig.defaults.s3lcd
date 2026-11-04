@@ -1,0 +1,8 @@
+# the S3 boards with an LCD, ES3C28P and CrowPanel Advance 2.8" (both N16R8): read after
+# sdkconfig.defaults.esp32s3, whose 2 MB is for the e-paper boards. these have 16 MB of flash;
+# the CYD's 4 MB layout runs on them as it is, the map's tiles get the same 2 MB as there. the
+# octal PSRAM stays on from the S3 file
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y

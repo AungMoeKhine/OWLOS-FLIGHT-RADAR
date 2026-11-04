@@ -122,6 +122,10 @@
   footer { margin-top: 36px; color: var(--dim); font-size: 14px; }
   .newest { margin: 0 0 10px; color: var(--dim); }
   .newest b { color: var(--prim); font-family: "Cascadia Mono", Consolas, monospace; }
+  .older { margin: 0 0 12px; }
+  .older label { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 15px; }
+  .older select { width: auto; min-width: 180px; }
+  .older .nope { margin: 8px 0 0; }
   .changes h3 { margin: 16px 0 6px; font: 700 16px "Cascadia Mono", Consolas, monospace; letter-spacing: 1px; color: var(--prim); }
   .changes h3:first-of-type { margin-top: 4px; }
   .changes h3 span { color: var(--dim); font-weight: 400; }
@@ -159,13 +163,18 @@
   <h2 class="step">1 <span>/</span> FLASH THE BOARD</h2>
   <div class="box">
     <p class="newest">The newest firmware: <b id="newest">@VERSION@</b>. <a href="#versions">What changed in each version.</a></p>
+    <!-- the older versions the site keeps, fw/versions.json (.github/archive.sh): shown when there are any -->
+    <div class="older" id="older" hidden>
+      <label>The buttons below flash: <select id="pick"></select></label>
+      <p class="nope" id="older-note" hidden></p>
+    </div>
     <ol>
       <li>Use <b>Chrome or Edge on a computer</b>, a Chromebook too. Flashing goes over Web Serial, phones and Firefox can't do it.</li>
       <li>Plug the board in with a USB cable that carries data (some only charge).</li>
       <li>Press <b>CONNECT &amp; FLASH</b> of your board, pick its port and say <b>yes to erase</b>: whatever was on the board is replaced.</li>
       <li>No port in the list? On Windows the CH340 driver may be missing. Won't connect? Hold <b>BOOT</b> while you plug it in.</li>
       <li>Boards with touch ask you once to press 5 crosses, so the touch knows where the screen is.</li>
-      <li><b>2.8" CYD with the picture mirrored or in wrong colours: press BOOT</b> in the first 8 seconds after
+      <li><b>A 2.8" board with the picture mirrored or in wrong colours: press BOOT</b> in the first 8 seconds after
           power on. <a href="#boot">How, under the boards.</a></li>
       <li>Until it has WiFi the board flies a made-up <b>DEMO</b> sky and says so in big letters. The 2.8" and 3.5" CYD
           take the WiFi right there: <b>SET UP WIFI</b>, tap your network, type its password (step 3 shows where).
@@ -185,6 +194,51 @@
           screens, this one build fits them all. It starts as v2, the one most boards have.</div>
         <a class="boot-tag" href="#boot">WRONG PICTURE? PRESS BOOT</a>
         <esp-web-install-button class="flash" manifest="fw/ili9341/manifest.json">
+          <button slot="activate">CONNECT &amp; FLASH</button>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
+          <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
+        </esp-web-install-button>
+      </div>
+    </article>
+    <article class="card">
+      <img src="shots/02-live.png" alt="the radar on a 2.8 inch board" loading="lazy">
+      <div class="body">
+        <h3>2.8" LCDWIKI ES3C28P</h3>
+        <div class="spec">ESP32-S3, ILI9341V 320x240, capacitive touch. Its USB-C is the S3's own, no driver to
+          install. New: not run on one here yet, tell us how it goes in
+          <a href="https://www.facebook.com/groups/OWLOS">our group</a>.</div>
+        <a class="boot-tag" href="#boot">WRONG PICTURE? PRESS BOOT</a>
+        <esp-web-install-button class="flash" manifest="fw/es3c28p/manifest.json">
+          <button slot="activate">CONNECT &amp; FLASH</button>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
+          <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
+        </esp-web-install-button>
+      </div>
+    </article>
+    <article class="card">
+      <img src="shots/02-live.png" alt="the radar on a 2.8 inch board" loading="lazy">
+      <div class="body">
+        <h3>2.8" NM-CYD-C5</h3>
+        <div class="spec">The CYD's form on an ESP32-C5, ST7789 320x240, resistive touch. Either of its two
+          USB-C ports works. New: not run on one here yet, tell us how it goes in
+          <a href="https://www.facebook.com/groups/OWLOS">our group</a>.</div>
+        <a class="boot-tag" href="#boot">RED AND BLUE SWAPPED? PRESS BOOT</a>
+        <esp-web-install-button class="flash" manifest="fw/nmcydc5/manifest.json">
+          <button slot="activate">CONNECT &amp; FLASH</button>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
+          <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
+        </esp-web-install-button>
+      </div>
+    </article>
+    <article class="card">
+      <img src="shots/02-live.png" alt="the radar on a 2.8 inch board" loading="lazy">
+      <div class="body">
+        <h3>2.8" CrowPanel Advance</h3>
+        <div class="spec">Elecrow's 2.8" HMI, ESP32-S3, ST7789 320x240 IPS, capacitive touch. Either of its two
+          USB-C ports works. New: not run on one here yet, tell us how it goes in
+          <a href="https://www.facebook.com/groups/OWLOS">our group</a>.</div>
+        <a class="boot-tag" href="#boot">RED AND BLUE SWAPPED? PRESS BOOT</a>
+        <esp-web-install-button class="flash" manifest="fw/crowadv28/manifest.json">
           <button slot="activate">CONNECT &amp; FLASH</button>
           <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
           <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
@@ -236,7 +290,7 @@
        wrong one the picture is mirrored or in wrong colours, and BOOT is the way out (main.c, pick_screen) -->
   <section class="boot" id="boot">
     <div>
-      <h3>2.8" CYD: WRONG PICTURE? PRESS BOOT</h3>
+      <h3>2.8" BOARDS: WRONG PICTURE? PRESS BOOT</h3>
       <p>The 2.8" CYD is sold with three different screen chips that look the same from outside, and the board
          can't tell which one it has. It starts as <b>v2</b>, the one most boards have. Picture mirrored, upside
          down, in wrong colours or like a negative: your screen is another one, and the <b>BOOT</b> button
@@ -249,6 +303,9 @@
             again. Press till the picture looks right.</li>
         <li>That's all: the board keeps it, through a reset and a power cut.</li>
       </ol>
+      <p>The <b>ES3C28P</b> has the same three to go through, it starts as v2 too. The <b>NM-CYD-C5</b> has two:
+         <b>RGB</b> first, then <b>BGR</b>. The <b>CrowPanel Advance</b> has the same two the other way round,
+         <b>BGR</b> first. Press BOOT if red and blue look swapped.</p>
       <p>Missed the 8 seconds? Press RST and start again. Don't hold BOOT while you press RST: that wakes the
          flasher and the screen stays dark.</p>
     </div>
@@ -366,7 +423,7 @@
             <input id="watch" type="text" maxlength="99" autocomplete="off" spellcheck="false"
                    placeholder="EZY12AB, G-EUPT, 4CA7B4 or none">
           </label>
-          <label>LED on the back (2.8" and 3.5" CYD)
+          <label>The LED (2.8" and 3.5" CYD, ES3C28P, NM-CYD-C5)
             <select id="led">
               <option value="">keep as it is</option><option value="15">watched planes and emergencies</option>
               <option value="31">those, and any plane near</option><option value="47">those, and no data</option>
@@ -392,7 +449,7 @@
               <option value="1">10 seconds</option><option value="2">while it lasts</option>
             </select>
           </label>
-          <label>LED: the red one's pin
+          <label>LED: the red one's pin (the CYDs only)
             <select id="led_red">
               <option value="">keep as it is</option><option value="4">GPIO 4: most CYD boards</option>
               <option value="22">GPIO 22: LCDWIKI and Elegoo ESP32-32E boards</option>
@@ -492,8 +549,8 @@
         <ul>
           <li>Three tabs on the bar. <b>VIEW</b>: the range, units, map up, the screen upside down, labels, colours, the look,
               the map, the touch alignment. <b>DATA</b>: planes on the ground shown or hidden, the watch list, where the
-              planes come from, home, the WiFi, ABOUT. <b>LED</b> (2.8" and 3.5" CYD): what lights the LED on the back, how near
-              is near, how bright, for how long, TEST shows its red, green and blue, and RED ON picks the red one's pin.</li>
+              planes come from, home, the WiFi, ABOUT. <b>LED</b> (2.8" and 3.5" CYD, ES3C28P, NM-CYD-C5): what lights the LED, how near
+              is near, how bright, for how long, TEST shows its red, green and blue, and on the CYDs RED ON picks the red one's pin.</li>
           <li><b>Tap a button</b> to change it, <b>minus and plus</b> for numbers. Drag to see the rest.</li>
         </ul>
       </figcaption>
@@ -866,6 +923,66 @@ fetch('version.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).t
 fetch('CHANGES.md', { cache: 'no-cache' }).then(r => r.ok ? r.text() : null).then(t => {
   if (t) {
     changes(t);
+  }
+}).catch(() => {});
+
+/* --- an older version: fw/versions.json lists each one the site keeps, the newest first, the newest
+ * in fw/ and the older ones in fw/<version>/ (.github/archive.sh). picking one points every board's
+ * button at that version's manifest, a board that came later says so instead. ?v=0.3 picks one
+ * from a link --- */
+const flashers = [...document.querySelectorAll('esp-web-install-button')].map(b => {
+  const m = (b.getAttribute('manifest') || '').match(/^fw\/([^/]+)\/manifest\.json$/);
+  const later = document.createElement('p');
+  later.className = 'nope flash';
+  later.hidden = true;
+  b.after(later);
+  return { b, board: m ? m[1] : '', later };
+});
+
+function pickVersion(all, i) {
+  const v = all[i];
+  for (const f of flashers) {
+    if (!f.board) {
+      continue;
+    }
+    const has = v.boards.includes(f.board);
+    f.b.setAttribute('manifest', v.dir + '/' + f.board + '/manifest.json');
+    f.b.hidden = !has;
+    f.later.hidden = has;
+    f.later.textContent = has ? '' : 'Not in ' + v.version + ': this board came in a later version.';
+  }
+  const note = $('older-note');
+  note.hidden = i === 0;
+  if (i === 0) {
+    note.replaceChildren();
+    return;
+  }
+  const group = document.createElement('a');
+  group.href = 'https://www.facebook.com/groups/OWLOS';
+  group.textContent = 'our group';
+  note.replaceChildren(v.version + ' is an older version, for a board the newest went wrong on: tell us what went wrong in ',
+    group, '. An older version may not read all the settings a newer one saved: the WiFi stays, the rest may need step 2 again.');
+}
+
+fetch('fw/versions.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).then(j => {
+  const all = j && Array.isArray(j.versions) ? j.versions.filter(v => v && /^[0-9]+(\.[0-9]+)*$/.test(v.version) &&
+    /^fw(\/[0-9.]+)?$/.test(v.dir) && Array.isArray(v.boards)) : [];
+  if (all.length < 2) {
+    return;
+  }
+  const pick = $('pick');
+  all.forEach((v, i) => {
+    const o = document.createElement('option');
+    o.value = String(i);
+    o.textContent = v.version + (i === 0 ? ', the newest' : '');
+    pick.append(o);
+  });
+  pick.addEventListener('change', () => pickVersion(all, Number(pick.value)));
+  $('older').hidden = false;
+  const asked = all.findIndex(v => v.version === new URLSearchParams(location.search).get('v'));
+  if (asked > 0) {
+    pick.value = String(asked);
+    pickVersion(all, asked);
   }
 }).catch(() => {});
 
