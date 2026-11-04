@@ -1,79 +1,83 @@
 #!/usr/bin/env bash
-# every version's firmware kept: a GitHub release a version (tag v0.4), in it a zip a board
-# (fw-<board>.zip: its three binaries and flash_args) and version.txt (the version as its manifests
-# say it). the site puts the older ones next to the newest, so a board can go back to one
-#   archive.sh seed <list>               the versions from before the archive, from the runs that built them
-#   archive.sh this <fw> <ver> <text>    this run's build: the release of <ver>, made or made again
-#   archive.sh site <fw> <ver> <text>    every older release into <fw>/<version>/, and <fw>/versions.json
-# <fw> holds a folder a board, as the firmware job leaves them. needs gh (GH_TOKEN, GH_REPO), zip, unzip
+# every version's firmware kept on the site itself: the newest in fw/<board>/, each older one in
+# fw/<version>/<board>/, fw/versions.json lists them all, the newest first. a run puts its own build
+# in fw/ and takes the older ones from the site as it is now, and the versions from before the site
+# kept them from the workflow runs that built them (archive-seed.txt). nothing is built again.
+# the list only grows: a version the site has and this run can't fetch stops the run before it
+# publishes, and so does a lower number than one the site has
+#   archive.sh <fw> <version> <version text> <site url> <seed list>
+# <fw> holds a folder a board, as the firmware job leaves them, their manifests made. needs curl,
+# and gh (GH_TOKEN, GH_REPO, actions: read) only while a seed is still to be fetched
+#
+# GitHub releases were the first try: the workflow's token may not make a tag on this repository's
+# commits (403 "Resource not accessible by integration", each of them changes .github/workflows),
+# not even on an empty commit of its own over one
 set -euo pipefail
+FW="$1"
+VER="$2"
+TEXT="$3"
+URL="${4%/}"
+SEEDS="$5"
+FILES="bootloader.bin partition-table.bin owlos-flight-radar.bin flash_args"
 
-# the versions in the archive, the newest first
-releases() {
-  gh release list --limit 200 --json tagName -q '.[].tagName' | sed -n 's/^v\([0-9][0-9.]*\)$/\1/p' | sort -V -r
+newer() {   # 1 if version $1 is above $2
+  [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1)" = "$1" ]
 }
 
-# a release from a folder of board folders: <dir>/<board>/flash_args and the binaries next to it
-publish() {   # <ver> <text> <dir> <commit> <--latest or --latest=false>
-  local ver="$1" text="$2" dir="$3" sha="$4" latest="$5" out fa own
-  # the tag goes on a commit of its own: the built commit's files as they are, that commit its
-  # parent. the workflow's token may not tag a commit that changes .github/workflows (GitHub's
-  # REST docs, Create a release: 403 "Resource not accessible by integration"), and each version
-  # so far came with such a change. this one changes nothing
-  own=$(gh api "repos/$GH_REPO/git/commits" -f message="Firmware $ver, built from $sha" \
-        -f tree="$(git rev-parse "$sha^{tree}")" -f "parents[]=$sha" -q .sha)
-  out=$(mktemp -d)
-  for fa in "$dir"/*/flash_args; do
-    (cd "$(dirname "$fa")" && zip -q -j "$out/fw-$(basename "$(dirname "$fa")").zip" ./*)
-  done
-  ls "$out"/fw-*.zip >/dev/null || { echo "no boards in $dir" >&2; exit 1; }
-  printf '%s\n' "$text" > "$out/version.txt"
-  # the release's text: that version's points in CHANGES.md
-  awk -v v="$ver" '/^## /{ p = ($2 == v); next } p && (NF || s) { s = 1; print }' CHANGES.md > "$out/notes.md"
-  printf '\nBuilt from %s.\n' "$sha" >> "$out/notes.md"
-  gh release create "v$ver" "$out"/fw-*.zip "$out/version.txt" --target "$own" --title "$ver" \
-    --notes-file "$out/notes.md" "$latest"
-  echo "v$ver: $(cd "$out" && ls fw-*.zip | tr '\n' ' ')"
-}
+# what the site keeps now, one line a version: version|text|dir|board board ...
+# versions.json is this script's own, one version a line, read back the way it is written
+live=$(mktemp)
+code=$(curl -sS -o "$live.json" -w '%{http_code}' "$URL/fw/versions.json?run=${GITHUB_RUN_ID:-0}")
+case "$code" in
+  200) sed -n 's/.*"version": "\([^"]*\)", "text": "\([^"]*\)", "dir": "\([^"]*\)", "boards": \[ \(.*\) \].*/\1|\2|\3|\4/p' \
+         "$live.json" > "$live" ;;
+  404) echo "the site keeps no versions yet"
+       : > "$live" ;;
+  *)   echo "the site's fw/versions.json answered $code: stopping, or the versions it keeps would be lost" >&2
+       exit 1 ;;
+esac
 
-seed() {   # <list>: lines "version run-id version text", # for a comment
-  local ver run text tmp dir fa
-  while read -r ver run text <&3; do
-    case "$ver" in ""|\#*) continue ;; esac
-    if gh release view "v$ver" >/dev/null 2>&1; then
-      echo "v$ver is in the archive already"
-      continue
-    fi
-    tmp=$(mktemp -d)
-    dir=$(mktemp -d)
-    gh run download "$run" -p 'fw-*' -D "$tmp"
-    # each board's files to a folder of its own, wherever the download put them
-    while read -r fa; do
-      cp -r "$(dirname "$fa")" "$dir/"
-    done < <(find "$tmp" -name flash_args)
-    publish "$ver" "$text" "$dir" "$(gh run view "$run" --json headSha -q .headSha)" --latest=false
-  done 3< "$1"
-}
-
-this() {   # <fw> <ver> <text>
-  local fw="$1" ver="$2" text="$3" newest
-  # a lower number than the archive's newest would make an older version again over the one kept
-  newest=$(releases | sed -n 1p)                      # sed reads it all: no broken pipe under pipefail
-  if [ -n "$newest" ] && [ "$(printf '%s\n%s\n' "$newest" "$ver" | sort -V | tail -n 1)" != "$ver" ]; then
-    echo "CHANGES.md says $ver, the archive has $newest: a new version needs a higher number" >&2
+kept=$(mktemp)                                   # version|text of each older one, as they get here
+while IFS='|' read -r v text dir boards <&3; do
+  if newer "$v" "$VER"; then
+    echo "CHANGES.md says $VER, the site has $v: a new version needs a higher number" >&2
     exit 1
   fi
-  # the same number again: this build is that version now, its release and tag go with it
-  if gh release view "v$ver" >/dev/null 2>&1; then
-    echo "v$ver is in the archive from an earlier build of $ver: made again from this one"
-    gh release delete "v$ver" --cleanup-tag --yes
+  [ "$v" = "$VER" ] && continue                  # the same number: this build is that version now
+  for b in $(echo "$boards" | tr -d '",'); do
+    mkdir -p "$FW/$v/$b"
+    for f in $FILES; do
+      code=$(curl -sS -o "$FW/$v/$b/$f" -w '%{http_code}' "$URL/$dir/$b/$f?run=${GITHUB_RUN_ID:-0}")
+      if [ "$code" != 200 ]; then
+        echo "$URL/$dir/$b/$f answered $code: stopping, or $v would be lost" >&2
+        exit 1
+      fi
+    done
+  done
+  echo "$v|$text" >> "$kept"
+  echo "$v: $(echo "$boards" | tr -d '",'), from the site"
+done 3< "$live"
+
+# the versions from before, from their runs, while the site does not have them yet
+while read -r v run text <&3; do
+  case "$v" in ""|\#*) continue ;; esac
+  if [ "$v" = "$VER" ] || grep -q "^$v|" "$kept"; then
+    continue
   fi
-  publish "$ver" "$text" "$fw" "$GITHUB_SHA" --latest
-}
+  tmp=$(mktemp -d)
+  gh run download "$run" -p 'fw-*' -D "$tmp"
+  while read -r fa; do                           # each board's files, wherever the download put them
+    b=$(basename "$(dirname "$fa")")
+    mkdir -p "$FW/$v/$b"
+    cp "$(dirname "$fa")"/* "$FW/$v/$b/"
+  done < <(find "$tmp" -name flash_args)
+  echo "$v|$text" >> "$kept"
+  echo "$v: $(cd "$FW/$v" && ls | tr '\n' ' '), from run $run"
+done 3< "$SEEDS"
 
 # one entry of versions.json: the version, its text, its folder from the page, the boards in it.
 # all of them are ours (CHANGES.md, the git log, make-manifests.sh's names): nothing to escape
-entry() {   # <ver> <text> <dir as the page has it> <dir here>
+entry() {   # <version> <text> <dir as the page has it> <dir here>
   local boards="" m
   for m in "$4"/*/manifest.json; do
     if [ -f "$m" ]; then
@@ -83,30 +87,10 @@ entry() {   # <ver> <text> <dir as the page has it> <dir here>
   printf '    { "version": "%s", "text": "%s", "dir": "%s", "boards": [ %s ] }' "$1" "$2" "$3" "$boards"
 }
 
-site() {   # <fw> <ver> <text>
-  local fw="$1" ver="$2" text="$3" v t tmp z b list
-  list=$(entry "$ver" "$text" "fw" "$fw")             # the newest is <fw> itself, built by this run
-  for v in $(releases); do
-    [ "$v" = "$ver" ] && continue
-    tmp=$(mktemp -d)
-    gh release download "v$v" -D "$tmp" -p 'fw-*.zip' -p version.txt
-    for z in "$tmp"/fw-*.zip; do
-      b=$(basename "$z" .zip)
-      b=${b#fw-}
-      mkdir -p "$fw/$v/$b"
-      unzip -q -o "$z" -d "$fw/$v/$b"
-    done
-    t=$(head -n 1 "$tmp/version.txt")
-    bash .github/make-manifests.sh "$fw/$v" "$t"
-    list="$list,"$'\n'"$(entry "$v" "$t" "fw/$v" "$fw/$v")"
-  done
-  printf '{\n  "versions": [\n%s\n  ]\n}\n' "$list" > "$fw/versions.json"
-  cat "$fw/versions.json"
-}
-
-case "${1:-}" in
-  seed) seed "$2" ;;
-  this) this "$2" "$3" "$4" ;;
-  site) site "$2" "$3" "$4" ;;
-  *) echo "archive.sh seed <list> | this <fw> <ver> <text> | site <fw> <ver> <text>" >&2; exit 1 ;;
-esac
+list=$(entry "$VER" "$TEXT" "fw" "$FW")
+while IFS='|' read -r v text; do
+  bash .github/make-manifests.sh "$FW/$v" "$text" > /dev/null
+  list="$list,"$'\n'"$(entry "$v" "$text" "fw/$v" "$FW/$v")"
+done < <(sort -t '|' -k 1,1 -V -r "$kept")
+printf '{\n  "versions": [\n%s\n  ]\n}\n' "$list" > "$FW/versions.json"
+cat "$FW/versions.json"

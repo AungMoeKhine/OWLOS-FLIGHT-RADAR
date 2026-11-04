@@ -254,12 +254,14 @@ and a PC preview.
 - The version is the first `## ` line of `CHANGES.md`: the firmware is built with it, and the site
   publishes it in `version.json` for the boards and shows the file as its history. A new version is a new
   section at the top of that file.
-- Each version's firmware is kept in a GitHub release of its own, `v0.4` and so on, a zip a board in it
-  (`.github/archive.sh`). Every build of a version makes its release again, the older ones are never
-  touched: to keep a build, give the next one a new number. A lower number than the newest release
-  stops the workflow before the site. The site takes the older versions from their releases into
-  `fw/<version>/` and lists them in `fw/versions.json`. 0.2 and 0.3 came before the archive: their
-  releases are made once from the runs that built them, `.github/archive-seed.txt`.
+- The site keeps each version's firmware (`.github/archive.sh`): the newest in `fw/<board>/`, the older
+  ones in `fw/<version>/<board>/`, all of them listed in `fw/versions.json`. Each run takes the older
+  ones from the site as it is and puts its own build next to them, nothing is built again. Every
+  build of a version replaces that version, the older ones are never touched: to keep a build, give
+  the next one a new number. A lower number than one the site has, or a file of an older version the
+  run can't fetch, stops the workflow and the site stays as it was. Each run also keeps all of them
+  as its `site-fw` artifact for 90 days. 0.2 and 0.3 came before the site kept versions: they come
+  once from the runs that built them, `.github/archive-seed.txt`.
 - `tools/QrBake` (.NET 8) writes the site's address and its QR code into `core/qr_site.h` and `.c`.
 - `tools/preview/BUILD.BAT <screen>` (Visual Studio 2022) draws every page on the PC into `shots/`.
   `TOUR.BAT` films the how-to tour, `GIF.BAT` makes the GIF above from it (both with ffmpeg).
