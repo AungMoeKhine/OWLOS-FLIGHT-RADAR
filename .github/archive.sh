@@ -15,7 +15,13 @@ releases() {
 
 # a release from a folder of board folders: <dir>/<board>/flash_args and the binaries next to it
 publish() {   # <ver> <text> <dir> <commit> <--latest or --latest=false>
-  local ver="$1" text="$2" dir="$3" sha="$4" latest="$5" out fa
+  local ver="$1" text="$2" dir="$3" sha="$4" latest="$5" out fa own
+  # the tag goes on a commit of its own: the built commit's files as they are, that commit its
+  # parent. the workflow's token may not tag a commit that changes .github/workflows (GitHub's
+  # REST docs, Create a release: 403 "Resource not accessible by integration"), and each version
+  # so far came with such a change. this one changes nothing
+  own=$(gh api "repos/$GH_REPO/git/commits" -f message="Firmware $ver, built from $sha" \
+        -f tree="$(git rev-parse "$sha^{tree}")" -f "parents[]=$sha" -q .sha)
   out=$(mktemp -d)
   for fa in "$dir"/*/flash_args; do
     (cd "$(dirname "$fa")" && zip -q -j "$out/fw-$(basename "$(dirname "$fa")").zip" ./*)
@@ -24,7 +30,8 @@ publish() {   # <ver> <text> <dir> <commit> <--latest or --latest=false>
   printf '%s\n' "$text" > "$out/version.txt"
   # the release's text: that version's points in CHANGES.md
   awk -v v="$ver" '/^## /{ p = ($2 == v); next } p && (NF || s) { s = 1; print }' CHANGES.md > "$out/notes.md"
-  gh release create "v$ver" "$out"/fw-*.zip "$out/version.txt" --target "$sha" --title "$ver" \
+  printf '\nBuilt from %s.\n' "$sha" >> "$out/notes.md"
+  gh release create "v$ver" "$out"/fw-*.zip "$out/version.txt" --target "$own" --title "$ver" \
     --notes-file "$out/notes.md" "$latest"
   echo "v$ver: $(cd "$out" && ls fw-*.zip | tr '\n' ' ')"
 }
