@@ -2,6 +2,9 @@
 # sdkconfig.defaults.esp32s3, whose 2 MB is for the e-paper boards. these have 16 MB of flash;
 # the CYD's 4 MB layout runs on them as it is, the map's tiles get the same 2 MB as there. the
 # octal PSRAM stays on from the S3 file
+# the log goes to two ports here, UART0 and the S3's own USB: deeper than on the ESP32, and on the
+# event task that went past the stack's end
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_ESPTOOLPY_FLASHMODE_QIO=y

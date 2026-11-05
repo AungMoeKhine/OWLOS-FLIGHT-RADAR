@@ -220,10 +220,11 @@
 /* Elecrow CrowPanel Advance 5.0" HMI (DIS02050A), ESP32-S3-WROOM-1 N16R8, 800x480 IPS on the RGB bus
  * (ST7262), GT911 capacitive touch. pins from Elecrow's repository (Elecrow-RD/CrowPanel-Advance-5-
  * HMI-ESP32-S3-AI-Powered-IPS-Touch-Screen-800x480): its LovyanGFX setups for V1.0 and V1.2, the
- * same but for the clock, 21 MHz and 16; 16 in the V1.2 and V1.3 examples, Arduino and IDF. NOT run
- * on one: experimental, a viewer asked for it. the backlight and the touch's reset are behind a
- * chip of the board's own, lcd_rgb.c. its speaker, microphone and SD card are on pins shared
- * through a switch on the board, none of them is driven here */
+ * same but for the clock, 21 MHz and 16; 16 in the V1.2 and V1.3 examples, Arduino and IDF. a
+ * viewer's V1.3 runs it (2026-11-05): picture, touch, 3 fps on the radar with one core. V1.0 to
+ * V1.2 not seen yet. the backlight and the touch's reset are behind a chip of the board's own,
+ * lcd_rgb.c. its speaker, microphone and SD card are on pins shared through a switch on the board,
+ * none of them is driven here */
 #define DISP_LCD_RGB   1
 #define LCD_RGB_DATA   21, 47, 48, 45, 38,  9, 10, 11, 12, 13, 14,  7, 17, 18, 3, 46   // blue, green, red, lowest bit first
 #define PIN_LCD_HSYNC 40
@@ -232,7 +233,7 @@
 #define PIN_LCD_PCLK  39
 #define LCD_RGB_HZ    (16 * 1000 * 1000)
 #define LCD_BOARD_CHIP 1
-#define DISP_STRIP    16
+#define DISP_STRIP    12        // 16 left no room in the RAM for the second core's strip, on a V1.3
 #define DISP_HELPER   1
 #define LCD_PROFILES   2
 #define LCD_ORDER      { 0, 1 }
@@ -256,7 +257,7 @@
 #define PIN_LCD_PCLK  42
 #define LCD_RGB_HZ    (16 * 1000 * 1000)
 #define PIN_LCD_BL     2        // high = lit
-#define DISP_STRIP    16
+#define DISP_STRIP    12        // as the CrowPanel's
 #define DISP_HELPER   1
 #define LCD_PROFILES   2
 #define LCD_ORDER      { 0, 1 }

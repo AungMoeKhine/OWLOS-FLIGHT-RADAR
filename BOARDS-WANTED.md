@@ -116,7 +116,7 @@ on the site; none of the built ones here has been run on that board yet unless i
   S3's own USB pins, so the console stays off that USB here. Missing: a second source. One manual
   lists a version without touch.
 
-## Elecrow CrowPanel Advance 5.0": built 2026-11-05, experimental, not run on one yet
+## Elecrow CrowPanel Advance 5.0": built 2026-11-05, experimental, runs on a viewer's V1.3
 
 - Asked 2026-11-05: "Any chance for a 5" board like an elecrow advanced 5"?" The second ask for 800x480,
   after the Guition above. Whether the asker has one, and would test, is not known yet.
@@ -154,8 +154,17 @@ on the site; none of the built ones here has been run on that board yet unless i
   look only, as on the 3.5"; the maps may want it too.
 - Not driven: the speaker, the microphone and the SD card (GPIO 4 5 6 19 20, shared, picked by a switch
   on the board), the buzzer, the RTC, the wireless socket.
-- To learn from the asker: have they got one, which version, does the picture come, are the colours
-  right, does the touch land where it is pressed, does the picture shake while the map loads.
+- The asker has one and sent a photo of its back, 2026-11-05: SKU DIS02050A, V1.3, the newest version, one
+  USB-C marked USB-5V-IN. Its silkscreen agrees with the build: I2C on 15 and 16 (the RTC at 0x51 on
+  them), UART0 on 43 and 44. The switch S1 S0 picks the microphone, speaker, wireless or SD card only.
+- First run on it, 2026-11-05: the picture and the touch work, 3 fps and 280 ms a frame on the radar
+  (disc 151, panel 39, packing into the frame 52), 14 fps on SET. The second core never started: no
+  room in the RAM for its strip. Opening the WiFi page restarted the board: the event task's stack ran
+  into the event queue's lock (firmware/main/net.c says how). That scan also found 0 networks, reason
+  not known; the build after it logs a failed scan and the free RAM, and keeps the WiFi's buffers in
+  the PSRAM.
+- To learn from the asker: does the list of networks come now, does it join, are the colours right, does
+  the picture shake while the map loads.
 
 ## Others on sale, nobody asked yet
 

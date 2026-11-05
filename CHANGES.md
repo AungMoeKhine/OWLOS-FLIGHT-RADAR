@@ -19,6 +19,7 @@ The site keeps the firmware of each version: a new number here keeps the one bef
 - Two 5" boards, experimental, never run on a real board here: Elecrow's CrowPanel Advance 5.0 and the
   Guition JC8048W550, ESP32-S3 with an 800x480 screen on the RGB bus and capacitive touch. The same pages
   as on the 3.5", half as big again, in the screen's own pixels. Tell us how it goes.
+- Fixed: looking for WiFi networks on the screen could restart the ESP32-S3 boards.
 
 ## 0.5
 

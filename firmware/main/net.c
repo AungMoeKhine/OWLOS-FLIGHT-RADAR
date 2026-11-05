@@ -28,11 +28,15 @@ static portMUX_TYPE s_scan_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static void scan_collect(int ok)
 {
-    ap_t got[UI_APS];
+    /* off the stack: this runs on the event task, 2.5 KB, and the log line below wants most of
+     * that. with these 650 bytes on it the log of a board that writes to two ports ran past the
+     * stack's end into the event queue's lock, and the next event hung the core for good (a
+     * viewer's 5", 2026-11-05: its core dump has the lock 12 bytes under the stack) */
+    static ap_t got[UI_APS];
+    static wifi_ap_record_t r;
     int ng = 0;
     uint16_t n = 0;
     if (ok) esp_wifi_scan_get_ap_num(&n);
-    wifi_ap_record_t r;
     while (n-- && esp_wifi_scan_get_ap_record(&r) == ESP_OK) {   // one at a time: no list of them all in the heap
         const char *name = (const char *)r.ssid;
         if (!name[0]) continue;                                   // a hidden one
@@ -61,7 +65,7 @@ static void scan_collect(int ok)
     s_scan = ok ? SCAN_DONE : SCAN_FAILED;
     s_scan_started = 0;
     taskEXIT_CRITICAL(&s_scan_mux);
-    ESP_LOGI(TAG, "looked round: %d networks", ng);
+    ESP_LOGI(TAG, "looked round: %d networks%s", ng, ok ? "" : ", the scan failed");
 }
 
 static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)

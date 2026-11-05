@@ -4,7 +4,7 @@
  * frame lies in the PSRAM and goes out through two small buffers in the RAM (esp_lcd's bounce
  * buffers, what Elecrow's IDF examples do), which ride out what else the PSRAM is busy with. with
  * the code in the PSRAM too (sdkconfig.defaults.s3rgb) a write to the flash does not stop it.
- * NOT run on hardware: no board with this bus was here when it was written (board.h)
+ * written without a board with this bus at hand; a viewer's CrowPanel runs it (board.h)
  */
 #include "display.h"
 #if DISP_LCD_RGB

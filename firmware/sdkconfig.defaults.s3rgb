@@ -8,5 +8,9 @@ CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
 CONFIG_LCD_RGB_ISR_IRAM_SAFE=y
 # when a frame cannot keep up all the same, the picture finds its place again at the next VSYNC
 CONFIG_LCD_RGB_RESTART_IN_VSYNC=y
-# TLS out of the RAM: the strips and the bounce buffers want that
+# TLS and the WiFi's buffers out of the RAM: the strips and the bounce buffers want it, on the first
+# board that ran this the second core's strip found no room. the WiFi asks for PSRAM only when
+# PSRAM is not optional, and on these boards the picture is in it anyway
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+# CONFIG_SPIRAM_IGNORE_NOTFOUND is not set
