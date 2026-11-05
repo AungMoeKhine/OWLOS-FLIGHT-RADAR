@@ -419,6 +419,47 @@
               <option value="0">hidden: next to an airport</option>
             </select>
           </label>
+          <label>Radar: the lowest height shown, in flight levels (100 is 10 000 ft, 0 no limit)
+            <input id="fl_lo" type="number" min="0" max="450" step="10" placeholder="keep as it is">
+          </label>
+          <label>Radar: the highest height shown (0 no limit)
+            <input id="fl_hi" type="number" min="0" max="450" step="10" placeholder="keep as it is">
+          </label>
+          <label>Radar: labels say climbing and speed
+            <select id="block">
+              <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
+            </select>
+          </label>
+          <label>Radar: labels say the height set on the autopilot
+            <select id="autopilot">
+              <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
+            </select>
+          </label>
+          <label>Radar: a line ahead of each plane
+            <select id="vectors">
+              <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
+            </select>
+          </label>
+          <label>Radar: planes move as the beam passes
+            <select id="beam_step">
+              <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
+            </select>
+          </label>
+          <label>Radar: the time in UTC
+            <select id="clock">
+              <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
+            </select>
+          </label>
+          <label>Radar: planes with no fresh position go dim
+            <select id="lost">
+              <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
+            </select>
+          </label>
+          <label>Radar: two planes closing on each other turn red
+            <select id="conflict">
+              <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
+            </select>
+          </label>
           <label>Planes to follow
             <input id="watch" type="text" maxlength="99" autocomplete="off" spellcheck="false"
                    placeholder="EZY12AB, G-EUPT, 4CA7B4 or none">
@@ -547,9 +588,10 @@
       <figcaption>
         <h3>SET</h3>
         <ul>
-          <li>Three tabs on the bar. <b>VIEW</b>: the range, units, map up, the screen upside down, labels, colours, the look,
+          <li>Tabs on the bar. <b>VIEW</b>: the range, units, map up, the screen upside down, labels, colours, the look,
               the map, the touch alignment. <b>DATA</b>: planes on the ground shown or hidden, the watch list, where the
-              planes come from, home, the WiFi, ABOUT. <b>LED</b> (2.8" and 3.5" CYD, ES3C28P, NM-CYD-C5): what lights the LED, how near
+              planes come from, home, the WiFi, ABOUT. <b>RADAR</b>, also the gear under the scope: the radar look's options, all off
+              at first. LOWEST and HIGHEST, DATA BLOCK, AUTOPILOT, VECTORS, BEAM STEPS, CLOCK, LOST PLANES, CONFLICT. <b>LED</b> (2.8" and 3.5" CYD, ES3C28P, NM-CYD-C5): what lights the LED, how near
               is near, how bright, for how long, TEST shows its red, green and blue, and on the CYDs RED ON picks the red one's pin.</li>
           <li><b>Tap a button</b> to change it, <b>minus and plus</b> for numbers. Drag to see the rest.</li>
         </ul>
@@ -859,7 +901,8 @@ function settings() {
     s.key = $('key').value.trim();
     if (!s.key) throw 'Flightradar24 needs its key. Or pick the free networks.';
   }
-  for (const k of ['up', 'flip', 'theme', 'look', 'map', 'ground', 'led', 'led_level', 'led_hold', 'led_near', 'led_red']) if ($(k).value !== '') s[k] = +$(k).value;   // left out: the board keeps its own
+  for (const k of ['up', 'flip', 'theme', 'look', 'map', 'ground', 'vectors', 'beam_step', 'clock', 'block', 'autopilot',
+                   'lost', 'conflict', 'fl_lo', 'fl_hi', 'led', 'led_level', 'led_hold', 'led_near', 'led_red']) if ($(k).value !== '') s[k] = +$(k).value;   // left out: the board keeps its own
   if (s.led_red) s.led_test = 1;                     // the red one moved: show it
   const watch = $('watch').value.trim();
   if (watch) s.watch = /^none$/i.test(watch) ? '' : watch;
@@ -1081,6 +1124,7 @@ async function show(b) {
     say('The screen: ' + (c.up ? c.up + '° up' : 'north up') + ', ' + (c.flip ? 'upside down' : 'the right way up') +
         ', ' + theme + ' colours' + (look ? ', the ' + look + ' look, map ' + (c.map ? 'on' : 'off') : '') +
         (c.ground === 0 ? ', planes on the ground hidden' : '') +
+        (['vectors', 'beam_step', 'clock', 'block', 'autopilot', 'lost', 'conflict'].some(k => c[k]) || c.fl_lo || c.fl_hi ? ', radar options on' : '') +
         (c.led === 0 ? ', the LED off' : c.led ? ', the LED ' + (['low', 'mid', 'high'][c.led_level] || '?') +
           (c.led_red ? ', its red on GPIO ' + c.led_red : '') : '') +
         (c.screen >= 0 ? ', the 2.8" CYD\'s v' + (c.screen + 1) + ' screen' : '') + '.', 'ok');

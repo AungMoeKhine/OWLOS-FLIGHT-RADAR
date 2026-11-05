@@ -66,6 +66,8 @@ static volatile uint32_t s_watch_pick;     // one of them just came in range: th
 static uint32_t          s_watch_asked;    // ms of the last lookup of one, 0: ask now
 static light_t           s_light;          // what happened, for the LED (core/light.h), under s_lock
 static light_cfg_t       s_light_cfg;      // what lights it: the screen's and the site's, under s_lock
+static scope_opt_t       s_opt;            // the radar's options: the gear's and the site's, under s_lock
+static volatile int      s_opt_new;        // the site sent them: the screen takes them
 static volatile int      s_light_new;      // the site sent LED settings: the screen takes them
 static volatile int      s_light_test;     // the site asked for the LED's red, green, blue
 static char              s_newest[12];     // the version the site has (update_check), "": not heard. under s_lock
@@ -496,6 +498,7 @@ static void fetch_task(void *arg)
         map_service(&c);                              // first: a new look or range shows its map before the planes come
         uint32_t every = FREE_EVERY_MS;
         const int up = net_up();
+        if (up && s_opt.clock) net_time_start();
         int trying = 0;
         if (configured && !up) {
             uint32_t now = now_ms();
@@ -627,12 +630,16 @@ static void say_cfg(void)
     for (int ev = 0; ev < LIGHT_EVENTS; ev++) led |= s_light_cfg.on[ev] ? 1 << ev : 0;
     printf("OWLOS CFG {\"ssid\":\"%s\",\"lat\":%.5f,\"lon\":%.5f,\"place\":\"%s\",\"country\":\"%s\",\"src\":\"%s\",\"key\":%s,"
            "\"up\":%d,\"flip\":%d,\"theme\":%d,\"look\":%d,\"map\":%d,\"ground\":%d,\"watch\":\"%s\","
+           "\"vectors\":%d,\"beam_step\":%d,\"clock\":%d,\"block\":%d,\"autopilot\":%d,\"lost\":%d,\"conflict\":%d,"
+           "\"fl_lo\":%d,\"fl_hi\":%d,\"utc\":%u,"
            "\"led\":%d,\"led_level\":%d,\"led_hold\":%d,\"led_near\":%d,\"led_red\":%d,\"version\":\"%s\",\"newest\":\"%s\","
            "\"uptime\":%u,\"ran\":%u,\"reset\":\"%s\",\"screen\":%d}\n",
            json_esc(s_sec.ssid, ssid, sizeof ssid), (double)s_cfg.lat, (double)s_cfg.lon,
            json_esc(s_cfg.place, place, sizeof place), json_esc(s_cfg.country, country, sizeof country),
            s_cfg.source == SRC_FR24 ? "fr24" : "free", s_sec.key[0] ? "true" : "false", s_cfg.up, s_cfg.flip,
-           s_cfg.theme, s_cfg.look, s_cfg.map, s_cfg.ground, watch, led, s_light_cfg.level, s_light_cfg.hold,
+           s_cfg.theme, s_cfg.look, s_cfg.map, s_cfg.ground, watch, s_opt.vectors, s_opt.beam_step, s_opt.clock,
+           s_opt.block, s_opt.autopilot, s_opt.lost, s_opt.conflict, s_opt.fl_lo, s_opt.fl_hi,
+           (unsigned)net_utc(), led, s_light_cfg.level, s_light_cfg.hold,
            light_near_units(&s_light_cfg), light_red_gpio(&s_light_cfg), FLIGHT_VERSION, s_newest,
            (unsigned)(now_ms() / 1000u), (unsigned)s_ran_s, s_reset, s_screen);
     unlock();
@@ -671,6 +678,19 @@ static void on_line(const char *line)
     if (json_num(j, "look", &v) && v >= 0 && v < LOOKS) c.look = (uint8_t)v;
     if (json_num(j, "map", &v)) c.map = v != 0;
     if (json_num(j, "ground", &v)) c.ground = v != 0;
+    scope_opt_t opt;                                   // the radar's options
+    lock();
+    opt = s_opt;
+    unlock();
+    int opted = 0;
+    const struct { const char *name; uint8_t *on; } SWITCHES[] = {
+        { "vectors", &opt.vectors }, { "beam_step", &opt.beam_step }, { "clock", &opt.clock }, { "block", &opt.block },
+        { "autopilot", &opt.autopilot }, { "lost", &opt.lost }, { "conflict", &opt.conflict },
+    };
+    for (size_t i = 0; i < sizeof SWITCHES / sizeof SWITCHES[0]; i++)
+        if (json_num(j, SWITCHES[i].name, &v)) { *SWITCHES[i].on = v != 0; opted = 1; }
+    if (json_num(j, "fl_lo", &v) && v >= 0 && v <= SCOPE_FL_MAX) { opt.fl_lo = (int16_t)v; opted = 1; }
+    if (json_num(j, "fl_hi", &v) && v >= 0 && v <= SCOPE_FL_MAX) { opt.fl_hi = (int16_t)v; opted = 1; }
     char watch[WATCH_TEXT];
     int watched = json_str(j, "watch", watch, sizeof watch);   // "" empties it
     light_cfg_t light;
@@ -710,8 +730,13 @@ static void on_line(const char *line)
         s_light_cfg = light;
         s_light_new = 1;
     }
+    if (opted) {
+        s_opt = opt;
+        s_opt_new = 1;
+    }
     unlock();
     if (lit) store_save_light(&light);
+    if (opted) store_save_opt(&opt);
     if (watched) {
         store_save_watch(watch);
         ESP_LOGI(TAG, "watch list from the site: %s", watch[0] ? watch : "none");
@@ -886,6 +911,7 @@ static void ui_task(void *arg)
     ui_set_cfg(&s_ui, &c);
     lock();
     s_ui.light = s_light_cfg;                          // what lights the LED on the back
+    s_ui.opt = s_opt;
     unlock();
     led_init(light_red_gpio(&s_ui.light));
     s_ui.map = &s_map;                                 // the fetch task makes it, the scope draws it
@@ -1017,6 +1043,18 @@ static void ui_task(void *arg)
             unlock();
             store_save_light(&s_ui.light);
         }
+        if (s_opt_new) {                               // the site's radar options
+            lock();
+            s_ui.opt = s_opt;
+            s_opt_new = 0;
+            unlock();
+        }
+        if (cmd.opt) {                                 // the gear's rows
+            lock();
+            s_opt = s_ui.opt;
+            unlock();
+            store_save_opt(&s_ui.opt);
+        }
         uint8_t rgb[3];
         lock();
         if (cmd.light_test || s_light_test) {
@@ -1042,6 +1080,7 @@ static void ui_task(void *arg)
         snprintf(n->server, sizeof n->server, "%s", s_server);
         n->http = s_http;
         n->fetched = s_fetched;
+        n->utc = net_utc();
         s_ui.watch = s_watch;                          // SET says what the watched planes do
         memcpy(s_ui.newest, s_newest, sizeof s_ui.newest);   // and ABOUT what the site has
         unlock();
@@ -1142,6 +1181,7 @@ void app_main(void)
     store_load_watch(watch, sizeof watch);
     watch_set(&s_watch, watch);
     store_load_light(&s_light_cfg);
+    store_load_opt(&s_opt);
     s_demo_on = !s_sec.ssid[0];                         // no WiFi set: the demo from the first frame
     sky_init(&s_sky, s_cfg.lat, s_cfg.lon);
     demo_init(&s_demo, range_km(&s_cfg), esp_random());

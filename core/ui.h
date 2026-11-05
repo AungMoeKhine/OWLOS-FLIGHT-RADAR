@@ -44,6 +44,23 @@ typedef struct {
 
 #define FR_CFG_VERSION 4
 void fr_cfg_defaults(fr_cfg_t *c);
+
+/* the radar look's options, all off until someone turns them on: the gear under the scope, the
+ * site. kept by themselves like the LED's, so an older firmware flashed back finds fr_cfg_t as it left it */
+#define SCOPE_OPT_VERSION 1
+#define SCOPE_FL_MAX 450   /* LOWEST and HIGHEST go up to here */
+typedef struct {
+    uint8_t  version;
+    uint8_t  vectors;      /* a line ahead of every plane: which way and how fast */
+    uint8_t  beam_step;    /* a plane moves only when the beam goes over it, as on a real scope */
+    uint8_t  clock;        /* the time in UTC */
+    uint8_t  block;        /* the label says climbing or coming down, and the speed in tens of knots */
+    uint8_t  autopilot;    /* the label says the height set on the autopilot */
+    uint8_t  lost;         /* a plane with no fresh position is marked */
+    uint8_t  conflict;     /* two planes closing on each other go red */
+    int16_t  fl_lo, fl_hi; /* only planes between these, hundreds of feet. 0: no limit */
+} scope_opt_t;
+void scope_opt_defaults(scope_opt_t *o);
 float range_km(const fr_cfg_t *c);                 /* the radius of the scope */
 float unit_km(int dist_unit);                      /* km in one of DIST_* */
 
@@ -69,6 +86,7 @@ typedef struct {
     char     server[24];   /* who answered last */
     int      http;         /* last HTTP status, 0 none */
     uint32_t fetched;      /* ms of the last answer */
+    uint32_t utc;          /* seconds since 1970, 0: the board does not know the time */
     uint8_t  why;          /* WHY_* */
     uint8_t  scan;         /* SCAN_*: the WiFi page asked the board to look round */
     uint8_t  n_aps;
@@ -87,6 +105,7 @@ typedef struct {
     uint8_t home;          /* a new home: ui_t.home_text is a town, a postcode or "lat lon" */
     uint8_t watch;         /* a new watch list: ui_t.watch_text */
     uint8_t light;         /* ui_t.light changed: use it, keep it */
+    uint8_t opt;           /* ui_t.opt changed: use it, keep it */
     uint8_t light_test;    /* the LED's red, green, blue */
 } ui_cmd_t;
 
@@ -94,6 +113,8 @@ typedef struct {
 
 typedef struct {
     int16_t x, y;          /* where the plane is drawn now */
+    int16_t vx, vy;        /* the end of its speed line, opt.vectors. the same as x, y: none */
+    uint8_t alert;         /* opt.conflict: 1 + the index of the plane it is closing on, 0 none */
     uint8_t vis;           /* 1 inside the scope, 2 on the rim (outside the range) */
     int16_t lx, ly, lw;    /* its label, lw = 0: none */
     uint8_t tn;            /* its trail on the screen, 1/8 px, worked out once a frame: a strip */
@@ -105,6 +126,7 @@ typedef struct {
     uint32_t now, boot;    /* boot: when ui_init ran */
     sky_t    snap;         /* copy of the sky for this frame */
     fr_cfg_t cfg;
+    scope_opt_t opt;
     net_t    net;
     int      view, theme;
     uint32_t sel;          /* the picked plane's address, 0 none */

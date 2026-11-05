@@ -95,6 +95,7 @@ enum {
     HIT_NONE, HIT_SCOPE, HIT_ROWNEAR, HIT_PANEL, HIT_LOOK, HIT_DOTS,
     HIT_WIFI,                      /* the demo card's SET UP WIFI */
     HIT_NEWS,                      /* the note that the site has a newer version: ABOUT */
+    HIT_GEAR,                      /* the radar's options */
     HIT_BTN = 10,                  /* + panel button index */
     HIT_BAR = 20,                  /* + bottom bar button index */
     HIT_ROW = 40,                  /* + list row */
@@ -108,6 +109,7 @@ enum {
 #define UI_WIFI_PAGE (RADAR_HAS_TOUCH && !RADAR_ROUND)
 
 #define D2R (3.14159265f / 180.0f)
+#define BEAM_TURN_MS 6000u    /* the sweep goes round once in this */
 static inline float clampf(float v, float a, float b) { return v < a ? a : (v > b ? b : v); }
 static inline float wrap360(float a) { a = fmodf(a, 360.0f); return a < 0 ? a + 360.0f : a; }
 
@@ -157,6 +159,7 @@ const plane_t *sel_plane(const ui_t *u);
 int watched(const ui_t *u, const plane_t *p);         /* on the watch list */
 uint32_t alt_colour(const ui_t *u, const plane_t *p);
 void fmt_alt(const ui_t *u, const plane_t *p, char *buf, int sz, int short_form);
+void fmt_height(const ui_t *u, int feet, char *buf, int sz);   /* in short: FL350, 4200, or metres */
 void fmt_dist(const ui_t *u, float km, char *buf, int sz);
 const char *compass8(float deg);
 
@@ -189,6 +192,7 @@ int  setup_hit(const ui_t *u, int x, int y);
 int  setup_rows(const ui_t *u);                      /* in the tab shown */
 int  setup_repeats(int hit);
 void setup_act(ui_t *u, int hit, int longp, ui_cmd_t *cmd);
+void setup_open_radar(ui_t *u);                      /* the gear: SET at the radar's tab */
 void cal_draw(ui_t *u, canvas_t *cv);
 
 /* the WiFi page and the keyboard (ui_wifi.c) */

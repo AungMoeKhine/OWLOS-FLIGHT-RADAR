@@ -78,8 +78,9 @@ void list_draw(ui_t *u, canvas_t *cv)
 /* --- setup: one row a setting, what it does under its name. the rows sit in tabs: how it looks,
  * what it shows and where from, the LED. the tabs are the bottom bar's buttons, BACK the last --- */
 
-enum { S_RANGE, S_GROUND, S_WATCH, S_DIST, S_ALT, S_UP, S_FLIP, S_LABELS, S_THEME, S_LOOK, S_MAP, S_SOURCE, S_SERVER, S_HOME,
-       S_WIFI,
+enum { S_RANGE, S_GROUND, S_WATCH, S_DIST, S_ALT, S_UP, S_FLIP, S_LABELS, S_THEME, S_LOOK, S_MAP,
+       S_FL_LO, S_FL_HI, S_BLOCK, S_AUTOPILOT, S_VECTORS, S_BEAM, S_CLOCK, S_LOST, S_CONFLICT,
+       S_SOURCE, S_SERVER, S_HOME, S_WIFI,
 #if RADAR_HAS_LED
        S_LED_SOS, S_LED_RANGE, S_LED_UP, S_LED_DOWN, S_LED_NEAR, S_LED_NEAR_KM, S_LED_NODATA, S_LED_LEVEL, S_LED_HOLD,
        S_LED_TEST,
@@ -89,8 +90,15 @@ enum { S_RANGE, S_GROUND, S_WATCH, S_DIST, S_ALT, S_UP, S_FLIP, S_LABELS, S_THEM
 #endif
        S_TOUCH, S_ABOUT, S_ROWS };
 enum { K_NUM, K_BTN, K_INFO };
-enum { T_VIEW, T_DATA, T_LED };
-#define TABS (RADAR_HAS_LED ? 3 : 2)
+/* the tabs, in the order of the bar. the round glass's bar has no room for a fourth and it has no
+ * gear: the radar's rows go under VIEW there */
+#if RADAR_ROUND
+enum { T_VIEW, T_DATA, T_LED, T_RADAR = T_VIEW };
+#define TABS 2
+#else
+enum { T_VIEW, T_DATA, T_RADAR, T_LED };
+#define TABS (RADAR_HAS_LED ? 4 : 3)
+#endif
 
 static const struct { const char *label, *desc; int kind, tab; } ROWS[S_ROWS] = {
     { "RANGE",       "or drag inside the scope",     K_NUM, T_VIEW },
@@ -104,6 +112,15 @@ static const struct { const char *label, *desc; int kind, tab; } ROWS[S_ROWS] = 
     { "COLOURS",     "five colour themes",           K_BTN, T_VIEW },
     { "LOOK",        "radar, flat map, map's colours", K_BTN, T_VIEW },
     { "MAP",         "OpenStreetMap under the scope", K_BTN, T_VIEW },
+    { "LOWEST",      "planes under this are hidden", K_NUM, T_RADAR },
+    { "HIGHEST",     "planes over this are hidden",  K_NUM, T_RADAR },
+    { "DATA BLOCK",  "labels: climbing and speed",   K_BTN, T_RADAR },
+    { "AUTOPILOT",   "labels: the height it is set to", K_BTN, T_RADAR },
+    { "VECTORS",     "a line ahead of each plane",   K_BTN, T_RADAR },
+    { "BEAM STEPS",  "planes move as the beam passes", K_BTN, T_RADAR },
+    { "CLOCK",       "the time in UTC",              K_BTN, T_RADAR },
+    { "LOST PLANES", "dim when no fresh position",   K_BTN, T_RADAR },
+    { "CONFLICT",    "two planes closing turn red",  K_BTN, T_RADAR },
     { "DATA",        "free, or FR24 with a key",     K_BTN, T_DATA },
     { "FREE SERVER", "tried first, others back up",  K_BTN, T_DATA },
     { "HOME",        "",                             UI_WIFI_PAGE ? K_BTN : K_INFO, T_DATA },   /* typed on the WiFi keyboard */
@@ -195,6 +212,20 @@ static void value_text(const ui_t *u, int i, char *b, int sz)
     case S_THEME:  snprintf(b, (size_t)sz, "%s", UI_THEME[u->theme].name); break;
     case S_LOOK:   snprintf(b, (size_t)sz, "%s", LOOK_NAME[c->look < LOOKS ? c->look : 0]); break;
     case S_MAP:    snprintf(b, (size_t)sz, c->map ? "ON" : "OFF"); break;
+    case S_FL_LO:
+    case S_FL_HI: {
+        int fl = i == S_FL_LO ? u->opt.fl_lo : u->opt.fl_hi;
+        if (fl) fmt_height(u, fl * 100, b, sz);
+        else snprintf(b, (size_t)sz, "ALL");
+        break;
+    }
+    case S_BLOCK:     snprintf(b, (size_t)sz, u->opt.block ? "ON" : "OFF"); break;
+    case S_AUTOPILOT: snprintf(b, (size_t)sz, u->opt.autopilot ? "ON" : "OFF"); break;
+    case S_VECTORS:   snprintf(b, (size_t)sz, u->opt.vectors ? "ON" : "OFF"); break;
+    case S_BEAM:      snprintf(b, (size_t)sz, u->opt.beam_step ? "ON" : "OFF"); break;
+    case S_CLOCK:     snprintf(b, (size_t)sz, u->opt.clock ? "ON" : "OFF"); break;
+    case S_LOST:      snprintf(b, (size_t)sz, u->opt.lost ? "ON" : "OFF"); break;
+    case S_CONFLICT:  snprintf(b, (size_t)sz, u->opt.conflict ? "ON" : "OFF"); break;
     case S_SOURCE: snprintf(b, (size_t)sz, c->source == SRC_FR24 ? "FR24" : "FREE"); break;
     case S_SERVER: snprintf(b, (size_t)sz, "%s", SERVER_NAME[c->server < FREE_SERVERS ? c->server : 0]); break;
     case S_TOUCH:  snprintf(b, (size_t)sz, "ALIGN"); break;
@@ -301,8 +332,32 @@ void setup_draw(ui_t *u, canvas_t *cv)
         }
     }
     page_header(cv, "SETUP", RADAR_ROUND ? NULL : "DRAG TO SCROLL", C_FOCUS);
-    static const char *const L[4] = { "VIEW", "DATA", RADAR_HAS_LED ? "LED" : "BACK", "BACK" };
+    static const char *const L[] = { "VIEW", "DATA",
+#if !RADAR_ROUND
+                                     "RADAR",
+#endif
+#if RADAR_HAS_LED
+                                     "LED",
+#endif
+                                     "BACK" };
     bar(u, cv, L, TABS + 1, u->setup_tab);
+}
+
+void setup_open_radar(ui_t *u)
+{
+    u->view = VIEW_SETUP;
+    u->setup_tab = T_RADAR;
+    u->setup_scroll = 0;
+}
+
+// a step of ten flight levels. HIGHEST's "no limit" is above its top, LOWEST's under its bottom
+static int16_t fl_step(int fl, int dir, int high)
+{
+    int v = fl ? fl : high ? SCOPE_FL_MAX + 10 : 0;
+    v += dir * 10;
+    if (v > SCOPE_FL_MAX) return (int16_t)(high ? 0 : SCOPE_FL_MAX);
+    if (v < 10) return (int16_t)(high ? 10 : 0);
+    return (int16_t)v;
 }
 
 void setup_act(ui_t *u, int hit, int longp, ui_cmd_t *cmd)
@@ -349,6 +404,23 @@ void setup_act(ui_t *u, int hit, int longp, ui_cmd_t *cmd)
         break;
     case S_LOOK:   c->look = (uint8_t)((c->look + 1) % LOOKS); cmd->refetch = 1; break;
     case S_MAP:    c->map ^= 1; break;
+    case S_FL_LO:                                      // the two never cross
+        u->opt.fl_lo = fl_step(u->opt.fl_lo, dir, 0);
+        if (u->opt.fl_hi && u->opt.fl_lo > u->opt.fl_hi) u->opt.fl_lo = u->opt.fl_hi;
+        cmd->opt = 1;
+        return;
+    case S_FL_HI:
+        u->opt.fl_hi = fl_step(u->opt.fl_hi, dir, 1);
+        if (u->opt.fl_hi && u->opt.fl_lo > u->opt.fl_hi) u->opt.fl_hi = u->opt.fl_lo;
+        cmd->opt = 1;
+        return;
+    case S_BLOCK:     u->opt.block ^= 1; cmd->opt = 1; return;
+    case S_AUTOPILOT: u->opt.autopilot ^= 1; cmd->opt = 1; return;
+    case S_VECTORS:   u->opt.vectors ^= 1; cmd->opt = 1; return;
+    case S_BEAM:      u->opt.beam_step ^= 1; cmd->opt = 1; return;
+    case S_CLOCK:     u->opt.clock ^= 1; cmd->opt = 1; return;
+    case S_LOST:      u->opt.lost ^= 1; cmd->opt = 1; return;
+    case S_CONFLICT:  u->opt.conflict ^= 1; cmd->opt = 1; return;
     case S_SOURCE:
         if (c->source == SRC_FREE && !u->net.has_key) { toast(u, "NO FR24 KEY: SEND IT FROM THE SITE"); return; }
         c->source = c->source == SRC_FREE ? SRC_FR24 : SRC_FREE;

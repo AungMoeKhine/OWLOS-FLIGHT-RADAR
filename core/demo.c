@@ -92,12 +92,19 @@ int demo_json(demo_t *d, float home_lat, float home_lon, float range_km, uint32_
         if (p->ground) snprintf(alt, sizeof alt, "\"ground\"");
         else snprintf(alt, sizeof alt, "%d", (int)p->alt);
         int sq = d->emergency && i == 4 ? 7700 : 1000 + i * 111;
+        // what a plane says of itself: where the autopilot takes it, the speed through the air, the wind
+        int set = ((int)p->alt + (p->vrate > 200 ? 4000 : p->vrate < -200 ? -4000 : 0) + 500) / 1000 * 1000;
         n += snprintf(out + n, (size_t)(cap - n),
                       "%s{\"hex\":\"%06x\",\"flight\":\"%-8s\",\"r\":\"%s\",\"t\":\"%s\",\"category\":\"%s\","
                       "\"lat\":%.5f,\"lon\":%.5f,\"alt_baro\":%s,\"gs\":%.1f,\"track\":%.1f,\"baro_rate\":%d,"
-                      "\"squawk\":\"%04d\",\"seen_pos\":0.4}",
+                      "\"squawk\":\"%04d\",\"seen_pos\":0.4",
                       i ? "," : "", 0xA0B000 + i, FLEET[i].flight, FLEET[i].reg, FLEET[i].type, FLEET[i].cat,
                       (double)lat, (double)lon, alt, (double)p->gs, (double)p->track, (int)p->vrate, sq);
+        if (!p->ground)
+            n += snprintf(out + n, (size_t)(cap - n),
+                          ",\"nav_altitude_mcp\":%d,\"nav_heading\":%.0f,\"ias\":%.0f,\"mach\":%.3f,\"wd\":240,\"ws\":35",
+                          set < 1000 ? 1000 : set, (double)p->track, (double)p->gs * 0.62, (double)p->gs / 620.0);
+        n += snprintf(out + n, (size_t)(cap - n), "}");
     }
     n += snprintf(out + n, (size_t)(cap - n), "],\"total\":%d}", DEMO_N);
     return n;

@@ -58,6 +58,12 @@ void fr_cfg_defaults(fr_cfg_t *c)
     snprintf(c->country, sizeof c->country, "Slovakia");
 }
 
+void scope_opt_defaults(scope_opt_t *o)
+{
+    memset(o, 0, sizeof *o);
+    o->version = SCOPE_OPT_VERSION;
+}
+
 static const float TO_KM[3] = { 1.0f, 1.852f, 1.609344f };
 
 float unit_km(int dist_unit) { return TO_KM[dist_unit >= 0 && dist_unit < 3 ? dist_unit : 0]; }
@@ -128,17 +134,21 @@ uint32_t alt_colour(const ui_t *u, const plane_t *p)
     return C_FOCUS;
 }
 
+void fmt_height(const ui_t *u, int feet, char *buf, int sz)
+{
+    if (u->cfg.alt_unit == ALT_M) snprintf(buf, (size_t)sz, "%d", (int)lroundf((float)feet * 0.3048f));
+    else if (feet >= 10000) snprintf(buf, (size_t)sz, "FL%03d", (feet + 50) / 100);
+    else snprintf(buf, (size_t)sz, "%d", feet);
+}
+
 /* height in the chosen unit. short form for labels: FL350 up high, 4200 down low */
 void fmt_alt(const ui_t *u, const plane_t *p, char *buf, int sz, int short_form)
 {
     if (p->ground) { snprintf(buf, (size_t)sz, "GND"); return; }
     if (!p->has_alt) { snprintf(buf, (size_t)sz, "---"); return; }
-    if (u->cfg.alt_unit == ALT_M) {
-        snprintf(buf, (size_t)sz, short_form ? "%d" : "%d M", (int)lroundf((float)p->alt * 0.3048f));
-        return;
-    }
-    if (short_form && p->alt >= 10000) snprintf(buf, (size_t)sz, "FL%03d", (int)((p->alt + 50) / 100));
-    else snprintf(buf, (size_t)sz, short_form ? "%d" : "%d FT", (int)p->alt);
+    if (short_form) { fmt_height(u, (int)p->alt, buf, sz); return; }
+    if (u->cfg.alt_unit == ALT_M) snprintf(buf, (size_t)sz, "%d M", (int)lroundf((float)p->alt * 0.3048f));
+    else snprintf(buf, (size_t)sz, "%d FT", (int)p->alt);
 }
 
 void fmt_dist(const ui_t *u, float km, char *buf, int sz)
@@ -378,7 +388,7 @@ void ui_set_cfg(ui_t *u, const fr_cfg_t *c)
 void ui_frame(ui_t *u, uint32_t now)
 {
     u->now = now;
-    u->beam = wrap360((float)(now % 6000u) * 0.06f);        // a turn in 6 s
+    u->beam = wrap360((float)(now % BEAM_TURN_MS) * (360.0f / BEAM_TURN_MS));
     if (u->sel && !sel_plane(u)) u->sel = 0;                // it flew away
     scope_frame(u);
 }
@@ -585,6 +595,7 @@ static void act(ui_t *u, int hit, int longp, int x, int y, ui_cmd_t *cmd)
     if (u->view == VIEW_MAIN) {
         if (hit == HIT_WIFI) { wifi_open(u, cmd); return; }
         if (hit == HIT_NEWS) { about_open(u); return; }
+        if (hit == HIT_GEAR) { setup_open_radar(u); return; }
         if (hit == HIT_SCOPE) {
             int i = scope_pick(u, x, y);
 #if RADAR_ROUND

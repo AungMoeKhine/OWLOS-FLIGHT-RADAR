@@ -62,7 +62,7 @@ void sky_home(sky_t *s, float lat, float lon)
 void plane_now(const plane_t *p, uint32_t now, float *x, float *y)
 {
     float dt = (float)(int32_t)(now - p->seen) / 1000.0f;
-    if (dt < 0.0f) dt = 0.0f;
+    if (dt < -20.0f) dt = -20.0f;                    // a moment before that position: worked back the same way
     if (dt > 20.0f) dt = 20.0f;                      // no further than 20 s on a guess
     float km = p->has_spd && !p->ground ? p->gs * 1.852f / 3600.0f * dt : 0.0f;
     *x = p->x + km * sinf(p->track * D2R);
@@ -258,6 +258,13 @@ static void copy(char *dst, int cap, const char *src)
     dst[n] = 0;
 }
 
+// a direction as 1..360: 0 is left to mean not heard
+static uint16_t degrees(double v)
+{
+    int d = (int)lround(v) % 360;
+    return (uint16_t)(d <= 0 ? d + 360 : d);
+}
+
 static void adsbx_field(plane_t *p, const char *k, const jv_t *v, int *have, float *age)
 {
     if (!strcmp(k, "hex") && v->is_str) p->icao = hex24(v->s);
@@ -278,6 +285,12 @@ static void adsbx_field(plane_t *p, const char *k, const jv_t *v, int *have, flo
     else if (!strcmp(k, "geom_rate") && v->is_num && !p->vrate) p->vrate = (int16_t)v->num;
     else if (!strcmp(k, "squawk") && v->is_str) p->squawk = (uint16_t)atoi(v->s);
     else if (!strcmp(k, "seen_pos") && v->is_num) *age = (float)v->num;
+    else if (!strcmp(k, "nav_altitude_mcp") && v->is_num) p->sel_fl = (int16_t)lround(v->num / 100.0);   // 32992 comes for 33000
+    else if (!strcmp(k, "nav_heading") && v->is_num) p->sel_hdg = degrees(v->num);
+    else if (!strcmp(k, "ias") && v->is_num) p->ias = (uint16_t)lround(v->num);
+    else if (!strcmp(k, "mach") && v->is_num) p->mach = (uint16_t)lround(v->num * 1000.0);
+    else if (!strcmp(k, "wd") && v->is_num) p->wind_dir = degrees(v->num);
+    else if (!strcmp(k, "ws") && v->is_num) p->wind_kt = (uint8_t)(v->num > 255.0 ? 255 : lround(v->num));
 }
 
 static void fr24_field(plane_t *p, const char *k, const jv_t *v, int *have, float *age)

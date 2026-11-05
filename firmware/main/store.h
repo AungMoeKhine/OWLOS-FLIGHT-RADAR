@@ -21,6 +21,8 @@ void store_load_watch(char *text, int cap);    // the watch list as typed, "" no
 void store_save_watch(const char *text);
 void store_load_light(light_cfg_t *c);         // what lights the LED, the defaults if none was kept
 void store_save_light(const light_cfg_t *c);
+void store_load_opt(scope_opt_t *o);           // the radar's options, all off if none were kept
+void store_save_opt(const scope_opt_t *o);
 /* how long this run has lasted, s, saved once a minute: the next start says how long the run
  * before it was, whatever ended it (a reset by the USB line or a power cut too) */
 uint32_t store_load_ran(void);

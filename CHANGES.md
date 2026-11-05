@@ -4,6 +4,17 @@ What changed in each version of OWLOS Flight Radar, the newest first. The first 
 version: the firmware is built with it, the site publishes it, and a board compares its own with it.
 The site keeps the firmware of each version: a new number here keeps the one before it as it was.
 
+## 0.6
+
+- The radar look has its small ring back. The pin stays on the two maps, where it is needed.
+- A gear under the radar opens its options, also in SET's new RADAR tab and on the site, all off until you
+  turn them on: the lowest and highest height shown; DATA BLOCK, climbing and speed in the labels;
+  AUTOPILOT, the height set on it; VECTORS, a line ahead of each plane; BEAM STEPS, a plane moves only when
+  the beam goes over it; CLOCK, the time in UTC, asked from pool.ntp.org only while it is on; LOST PLANES,
+  dim when there is no fresh position; CONFLICT, two planes closing on each other turn red.
+- A picked plane's panel is in bigger letters and says more when the plane sends it: what is set on the
+  autopilot, airspeed and Mach, the wind where it is.
+
 ## 0.5
 
 - Home is a pin now, in a colour nothing else on the screen has, with a dark edge, over the planes. The

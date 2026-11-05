@@ -34,6 +34,13 @@ typedef struct {
     float    track;              /* degrees, true */
     int16_t  vrate;              /* feet a minute */
     uint16_t squawk;             /* as the four octal digits read in decimal: 7700 */
+    /* what the plane says of itself, the free networks pass it on when they hear it. 0: not heard */
+    int16_t  sel_fl;             /* the height set on the autopilot, hundreds of feet */
+    uint16_t sel_hdg;            /* the heading set on it, 1..360 */
+    uint16_t ias;                /* indicated airspeed, knots */
+    uint16_t mach;               /* thousandths */
+    uint16_t wind_dir;           /* where the wind comes from, 1..360 */
+    uint8_t  wind_kt;
     uint32_t seen;               /* our ms clock at this position */
     uint32_t heard;              /* our ms clock at the last answer that had it */
     uint32_t first;              /* our ms clock when it first showed up, for the ring it gets */
@@ -89,7 +96,8 @@ int  sky_parse_adsbx(sky_t *s, const char *json, int len, uint32_t now);
 int  sky_parse_fr24(sky_t *s, const char *json, int len, uint32_t now);
 void sky_forget(sky_t *s, uint32_t now);          /* drops the ones not heard for SKY_FORGET */
 
-/* where a plane is now, dead-reckoned from its last position along its track: km from home */
+/* where a plane is at `now`, dead-reckoned from its last position along its track: km from home.
+ * `now` may be a few seconds back too: the radar's beam asks where it was when it went over it */
 void plane_now(const plane_t *p, uint32_t now, float *x, float *y);
 /* km east and north of (lat0, lon0). flat earth, good to a fraction of a percent at 300 km */
 void geo_offset(float lat0, float lon0, float lat, float lon, float *east, float *north);

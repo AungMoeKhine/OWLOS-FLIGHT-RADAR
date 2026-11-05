@@ -424,17 +424,135 @@ static void ring_label_at(int k, int *x, int *y)
 }
 
 static void grid_frame(ui_t *u);
+static int clip_circle(float *ax, float *ay, float *bx, float *by, float r);
+static int plane_lost(const ui_t *u, const plane_t *p);
+
+/* a label's second line: the height, and what the radar's options add to it, the way a real data
+ * block goes: FL280, up or down, >350 where the autopilot is taking it, 45 for 450 knots.
+ * cv NULL: only how wide it comes out */
+static int data_line(const ui_t *u, canvas_t *cv, int x, int y, const plane_t *p, uint32_t col)
+{
+    char t[12], s[16];
+    fmt_alt(u, p, t, sizeof t, 1);
+    if (cv) micro_text(cv, x, y, t, C_DIM, 230, 1);
+    int w = micro_width(t, 1);
+    if (u->cfg.look != LOOK_RADAR || p->ground) return w;
+    if (u->opt.block && abs(p->vrate) >= 200) {        // climbing or coming down
+        if (cv) {
+            float ax = (float)(x + w + 3), ay = (float)(y + 2);
+            if (p->vrate > 0) gfx_tri(cv, ax - 3, ay + 3, ax + 3, ay + 3, ax, ay - 3, col, 240);
+            else gfx_tri(cv, ax - 3, ay - 3, ax + 3, ay - 3, ax, ay + 3, col, 240);
+        }
+        w += 7;
+    }
+    if (u->opt.autopilot && p->sel_fl && p->has_alt && abs(p->sel_fl * 100 - (int)p->alt) >= 200) {
+        fmt_height(u, p->sel_fl * 100, t, sizeof t);   // not there yet: where it is going
+        snprintf(s, sizeof s, ">%s", t[0] == 'F' ? t + 2 : t);
+        if (cv) micro_text(cv, x + w + 1, y, s, C_PRIM, 235, 1);
+        w += 1 + micro_width(s, 1);
+    }
+    if (u->opt.block && p->has_spd) {
+        snprintf(s, sizeof s, "%d", (int)lroundf(p->gs / 10.0f));
+        if (cv) micro_text(cv, x + w + 4, y, s, C_DIM, 230, 1);
+        w += 4 + micro_width(s, 1);
+    }
+    if (plane_lost(u, p)) {
+        if (cv) micro_text(cv, x + w + 4, y, "CST", C_LOW, 235, 1);
+        w += 4 + micro_width("CST", 1);
+    }
+    return w;
+}
+
+/* the speed line on the radar, pixels a knot: a minute's flight at a range of 50 km. the same length
+ * at any zoom, so that zooming in does not fill the scope with lines */
+#define VECTOR_PX ((float)PR / 1620.0f)
+#define CLOCK_Y 26                                     /* under how the sky is: on the right it runs into the rim on the 2.8" */
+#define GEAR_W (GFX_H >= 320 ? 26 : 20)                /* the radar's options: under the scope, on the right */
+#define GEAR_X (PX - 9 - GEAR_W)
+#define GEAR_Y (GFX_H - 28 - GEAR_W)
+#define LOST_MS 12000                                  /* a position older than this is a guess */
+/* a conflict: both over the floor, closer than 3 NM and 1000 ft within two minutes. under the floor
+ * planes queue for a runway close together on purpose, and a real scope is told where not to warn */
+#define ALERT_KM    5.556f
+#define ALERT_FT    1000.0f
+#define ALERT_AHEAD 120.0f
+#define ALERT_FLOOR 5000
+
+// LOWEST and HIGHEST. the picked plane stays: what the panel follows does not vanish by itself
+static int in_band(const ui_t *u, const plane_t *p)
+{
+    const scope_opt_t *o = &u->opt;
+    if (u->cfg.look != LOOK_RADAR || (!o->fl_lo && !o->fl_hi) || !p->has_alt || p->icao == u->sel) return 1;
+    int fl = p->ground ? 0 : (int)((p->alt + 50) / 100);
+    return fl >= o->fl_lo && (!o->fl_hi || fl <= o->fl_hi);
+}
+
+static int plane_lost(const ui_t *u, const plane_t *p)
+{
+    return u->opt.lost && u->cfg.look == LOOK_RADAR && !p->ground && (int32_t)(u->now - p->seen) > LOST_MS;
+}
+
+static int can_conflict(const plane_t *p, const spot_t *sp)
+{
+    return sp->vis == 1 && p->has_alt && p->has_spd && !p->ground && p->alt >= ALERT_FLOOR;
+}
+
+/* which planes are closing on each other. every pair is a lot for the C3 to do in every frame, and
+ * nothing here changes faster than a second */
+static void conflicts(ui_t *u)
+{
+    static uint32_t at;
+    static float px[SKY_MAX], py[SKY_MAX], vx[SKY_MAX], vy[SKY_MAX];
+    const sky_t *s = &u->snap;
+    if (!u->opt.conflict || u->cfg.look != LOOK_RADAR) {
+        for (int i = 0; i < s->n; i++) u->spot[i].alert = 0;
+        return;
+    }
+    if (u->now - at < 1000u) return;
+    at = u->now;
+    for (int i = 0; i < s->n; i++) {
+        const plane_t *p = &s->p[i];
+        float km_s = p->gs * 1.852f / 3600.0f;
+        u->spot[i].alert = 0;
+        plane_now(p, u->now, &px[i], &py[i]);
+        vx[i] = km_s * sinf(p->track * D2R);
+        vy[i] = km_s * cosf(p->track * D2R);
+    }
+    for (int i = 0; i < s->n; i++) {
+        const plane_t *a = &s->p[i];
+        if (!can_conflict(a, &u->spot[i])) continue;
+        for (int j = i + 1; j < s->n; j++) {
+            const plane_t *b = &s->p[j];
+            if (!can_conflict(b, &u->spot[j])) continue;
+            float dx = px[j] - px[i], dy = py[j] - py[i], wx = vx[j] - vx[i], wy = vy[j] - vy[i];
+            float ww = wx * wx + wy * wy;
+            float t = ww > 1e-9f ? clampf(-(dx * wx + dy * wy) / ww, 0.0f, ALERT_AHEAD) : 0.0f;   // when they are closest
+            float cx = dx + wx * t, cy = dy + wy * t;
+            if (cx * cx + cy * cy > ALERT_KM * ALERT_KM) continue;
+            float dz = (float)(b->alt - a->alt) + (float)(b->vrate - a->vrate) * t / 60.0f;
+            if (fabsf(dz) >= ALERT_FT) continue;
+            u->spot[i].alert = (uint8_t)(j + 1);
+            u->spot[j].alert = (uint8_t)(i + 1);
+        }
+    }
+}
 
 /* what the strips share is worked out here, once a frame. the strips only read: on the 3.5" two
  * cores draw them at once (main.c) */
 void scope_frame(ui_t *u)
 {
+    const int radar = u->cfg.look == LOOK_RADAR;
     tick_lines(u->cfg.up);                             // the disc's ticks and the compass letters stand on them
     grid_frame(u);
     sky_t *s = &u->snap;
     // nearest first
     u->n_order = 0;
     for (int i = 0; i < s->n; i++) {
+        if (!in_band(u, &s->p[i])) {                   // as if it was not there: not drawn, not counted, not listed
+            u->spot[i].vis = 0;
+            u->spot[i].lw = 0;
+            continue;
+        }
         int j = u->n_order++;
         while (j > 0 && s->p[u->order[j - 1]].dist > s->p[i].dist) { u->order[j] = u->order[j - 1]; j--; }
         u->order[j] = (uint8_t)i;
@@ -448,6 +566,11 @@ void scope_frame(ui_t *u)
         float x, y, sx, sy;
         plane_now(p, u->now, &x, &y);
         to_screen(u, x, y, &sx, &sy);
+        if (radar && u->opt.beam_step) {               // shown where the beam last saw it, till the next turn
+            float since = wrap360(u->beam - atan2f(sx - (float)SCX, (float)SCY - sy) / D2R);
+            plane_now(p, u->now - (uint32_t)(since * (BEAM_TURN_MS / 360.0f)), &x, &y);
+            to_screen(u, x, y, &sx, &sy);
+        }
         float d = sqrtf(x * x + y * y);
         sp->lw = 0;
         if (square_look(u)) {                          // the flat square: on it, or a dart at its edge
@@ -467,8 +590,16 @@ void scope_frame(ui_t *u)
         } else {
             sp->vis = 0;
         }
-        sp->x = (int16_t)lroundf(sx);
-        sp->y = (int16_t)lroundf(sy);
+        sp->x = sp->vx = (int16_t)lroundf(sx);
+        sp->y = sp->vy = (int16_t)lroundf(sy);
+        if (radar && u->opt.vectors && sp->vis == 1 && p->has_spd && !p->ground) {
+            float a = screen_ang(u, p->track) * D2R, len = p->gs * VECTOR_PX;
+            float ax = sx, ay = sy, bx = sx + len * sinf(a), by = sy - len * cosf(a);
+            if (clip_circle(&ax, &ay, &bx, &by, (float)PR)) {   // it stops at the range ring
+                sp->vx = (int16_t)lroundf(bx);
+                sp->vy = (int16_t)lroundf(by);
+            }
+        }
         if (p->icao == u->sel) sel = i;
         // the trail on the screen, once a frame, not once a strip: the 3.5" has 40 of them
         sp->tn = sp->vis == 1 ? p->tn : 0;
@@ -486,6 +617,7 @@ void scope_frame(ui_t *u)
             if (ty + 1 > sp->ty1) sp->ty1 = (int16_t)(ty + 1);
         }
     }
+    conflicts(u);
 
     /* labels: the picked one first, then the nearest, each tries six places round its plane
      * and takes the first that covers nothing: other labels, planes, ring numbers, corners */
@@ -508,14 +640,17 @@ void scope_frame(ui_t *u)
             ring_label_at(k, &x, &y);
             used[nu++] = (box_t){ x - 1, y - 1, 24, 8 };
         }
-        used[nu++] = (box_t){ 0, 0, 92, 30 };           // the corner texts
+        used[nu++] = (box_t){ 0, 0, 92, u->opt.clock ? CLOCK_Y + 8 : 30 };   // the corner texts
         used[nu++] = (box_t){ PX - 82, 0, 82, 34 };
         used[nu++] = (box_t){ 0, GFX_H - 24, 150, 24 };
         used[nu++] = (box_t){ PX - 66, GFX_H - 31, 66, 31 };
         used[nu++] = (box_t){ SCX - 42, SCY + PR - 18, 84, 12 };
+#if RADAR_HAS_TOUCH
+        used[nu++] = (box_t){ GEAR_X - 2, GEAR_Y - 2, GEAR_W + 4, GEAR_W + 4 };
+#endif
     }
 #endif
-    {
+    if (u->cfg.look != LOOK_RADAR) {
         const int s = (int)(plane_size() * 8.0f);       // the pin on home: a label under it can't be read
         used[nu++] = (box_t){ view_cx(u) - s, SCY - s * 5 / 2, s * 2, s * 5 / 2 + 2 };
     }
@@ -532,11 +667,9 @@ void scope_frame(ui_t *u)
         const plane_t *p = &s->p[i];
         spot_t *sp = &u->spot[i];
         if (sp->vis != 1) continue;
-        char a[12];
-        fmt_alt(u, p, a, sizeof a, 1);
         int w = font_width(&FONT_SMALL, plane_name(p));
         if (w > LABEL_W) w = LABEL_W;
-        int wa = micro_width(a, 1);
+        int wa = data_line(u, NULL, 0, 0, p, 0);
         if (wa > w) w = wa;
         w += 5;
         const int cand[6][2] = { { 8, -9 }, { -8 - w, -9 }, { 5, -LABEL_H - 5 }, { 5, 6 }, { -5 - w, -LABEL_H - 5 }, { -5 - w, 6 } };
@@ -618,9 +751,18 @@ static void ring_numbers(ui_t *u, canvas_t *cv)
 
 #define INK RGB(16, 20, 30)            /* outlines on the classic map's light ground */
 
-/* where you are: a pin, its tip on home, over the planes. a colour of its own and a dark edge on
- * every ground: the map is full of white roads and white planes, and a small white ring got lost
- * among them. the head's radius, the side and the tip to the head's middle are a 5 12 13 triangle */
+/* the middle of the radar: a small ring under the planes. no pin here: the scope's own rings and
+ * cross say where home is, and a pin turns it from a radar into a map */
+static void home_ring(ui_t *u, canvas_t *cv)
+{
+    const float cx = (float)view_cx(u);
+    gfx_ring(cv, cx, SCY, 4.5f, 1.2f, C_FOCUS, 230);
+    gfx_disc(cv, cx, SCY, 1.5f, C_FOCUS, 255);
+}
+
+/* where you are on a map: a pin, its tip on home, over the planes. a colour of its own and a dark
+ * edge on every ground: the map is full of white roads and white planes, and a small white ring got
+ * lost among them. the head's radius, the side and the tip to the head's middle are a 5 12 13 triangle */
 static void home(ui_t *u, canvas_t *cv)
 {
     const float s = plane_size(), x = (float)view_cx(u), y = (float)SCY;
@@ -637,7 +779,6 @@ static void home(ui_t *u, canvas_t *cv)
 
 /* --- the flat looks: meridians and parallels, a round number of degrees or minutes apart --- */
 
-#if RADAR_ROUND
 // the part of a line inside the circle round the scope's middle, 0 if none
 static int clip_circle(float *ax, float *ay, float *bx, float *by, float r)
 {
@@ -656,7 +797,6 @@ static int clip_circle(float *ax, float *ay, float *bx, float *by, float r)
     *by = oy + dy * t1;
     return 1;
 }
-#endif
 
 // 48°50'N, or 48°N when the minutes are 0
 static void fmt_deg(float v, int lat, char *buf, int sz)
@@ -1023,6 +1163,12 @@ static void grid_draw(ui_t *u, canvas_t *cv)
     }
 }
 
+// a plane's colour: red and white in turn while it closes on another, as for an emergency
+static uint32_t spot_colour(const ui_t *u, const plane_t *p, const spot_t *sp)
+{
+    return sp->alert ? ((u->now / 400u) & 1) ? C_ALARM : C_FOCUS : alt_colour(u, p);
+}
+
 static void planes(ui_t *u, canvas_t *cv)
 {
     const sky_t *s = &u->snap;
@@ -1033,7 +1179,13 @@ static void planes(ui_t *u, canvas_t *cv)
         const plane_t *p = &s->p[i];
         const spot_t *sp = &u->spot[i];
         if (!sp->vis) continue;
-        uint32_t col = alt_colour(u, p);
+        uint32_t col = spot_colour(u, p, sp);
+        const int gone = plane_lost(u, p);
+        if (sp->alert > i + 1 && sp->alert <= s->n) {   // the pair: one line, from the first of the two
+            const spot_t *o = &u->spot[sp->alert - 1];
+            if (o->vis == 1 && gfx_touches(cv, (sp->y < o->y ? sp->y : o->y) - 2, (sp->y > o->y ? sp->y : o->y) + 2))
+                gfx_line(cv, sp->x, sp->y, o->x, o->y, 1.2f, C_ALARM, 210);
+        }
         int near = gfx_touches(cv, sp->y - 26, sp->y + 26);   // its glow, shape and rings: only the strips they are in
         if (sp->vis == 2) {                             // outside the range: a dart past the ring
             if (!near) continue;
@@ -1062,22 +1214,26 @@ static void planes(ui_t *u, canvas_t *cv)
         if (drawn) gfx_line(cv, px8 * 0.125f, py8 * 0.125f, sp->x, sp->y, 1.0f, tc, 80);
         int picked = p->icao == u->sel;
         float head = screen_ang(u, p->track);
+        int speed_line = sp->vx != sp->x || sp->vy != sp->y;
         if (picked) {                                    // where it will be in a minute
             float km = p->gs * 1.852f / 60.0f, a = head * D2R;
             gfx_line(cv, (float)view_cx(u), SCY, sp->x, sp->y, 1.0f, C_FOCUS, 60);
-            gfx_line(cv, sp->x, sp->y, sp->x + km * k * sinf(a), sp->y - km * k * cosf(a), 1.2f, C_FOCUS, 170);
+            if (speed_line) gfx_line(cv, sp->x, sp->y, sp->vx, sp->vy, 1.2f, C_FOCUS, 170);
+            else gfx_line(cv, sp->x, sp->y, sp->x + km * k * sinf(a), sp->y - km * k * cosf(a), 1.2f, C_FOCUS, 170);
             gfx_glow(cv, sp->x, sp->y, 16.0f, C_FOCUS, 100);
+        } else if (speed_line && gfx_touches(cv, (sp->y < sp->vy ? sp->y : sp->vy) - 2, (sp->y > sp->vy ? sp->y : sp->vy) + 2)) {
+            gfx_line(cv, sp->x, sp->y, sp->vx, sp->vy, 1.0f, col, 130);
         }
         if (!near) continue;
         if (u->cfg.look == LOOK_CLASSIC) {               // light ground: a dark edge round it, light does not show
             silhouette(cv, p->kind, sp->x, sp->y, head, size * 1.35f, INK, 200);
-        } else {
+        } else if (!gone) {
             // phosphor: brighter for a moment after the beam went over it
             float since = u->cfg.look == LOOK_RADAR ? wrap360(u->beam - wrap360(atan2f((float)(sp->x - SCX), (float)(SCY - sp->y)) / D2R)) : 180.0f;
             int glow = (int)(70.0f + 100.0f * (1.0f - since / 360.0f));
             gfx_glow(cv, sp->x, sp->y, 10.0f * size, col, glow);
         }
-        silhouette(cv, p->kind, sp->x, sp->y, head, size, gfx_mix(col, C_FOCUS, 60), 255);
+        silhouette(cv, p->kind, sp->x, sp->y, head, size, gfx_mix(col, C_FOCUS, 60), gone ? 110 : 255);
         uint32_t age = u->now - p->first;
         if (age < 1600u) {                               // just showed up: a ring opens round it
             float f = (float)age / 1600.0f;
@@ -1096,14 +1252,12 @@ static void planes(ui_t *u, canvas_t *cv)
         if (!sp->lw || sp->vis != 1) continue;
         int ta = sp->ly < sp->y ? sp->ly : sp->y, tb = sp->ly + LABEL_H > sp->y ? sp->ly + LABEL_H : sp->y;
         if (!gfx_touches(cv, ta - 2, tb + 2)) continue;  // the card and its line to the plane
-        uint32_t col = alt_colour(u, p);
+        uint32_t col = spot_colour(u, p, sp);
         int picked = p->icao == u->sel;
-        char a[12];
-        fmt_alt(u, p, a, sizeof a, 1);
         gfx_fill(cv, sp->lx, sp->ly, sp->lw, LABEL_H, C_BG0, 150);
         gfx_vline(cv, sp->lx, sp->ly, sp->ly + LABEL_H - 1, col, 230);
         font_text_clip(cv, &FONT_SMALL, sp->lx + 3, sp->ly, plane_name(p), picked ? C_FOCUS : gfx_mix(col, C_FOCUS, 90), 255, LABEL_W);
-        micro_text(cv, sp->lx + 3, sp->ly + 11, a, C_DIM, 230, 1);
+        data_line(u, cv, sp->lx + 3, sp->ly + 11, p, col);
         float nx = clampf((float)sp->x, (float)sp->lx, (float)(sp->lx + sp->lw - 1));
         float ny = clampf((float)sp->y, (float)sp->ly, (float)(sp->ly + LABEL_H - 1));
         float dx = nx - sp->x, dy = ny - sp->y, l = sqrtf(dx * dx + dy * dy);
@@ -1139,6 +1293,16 @@ static void home_coords(const ui_t *u, char *buf, int sz)
 {
     float la = u->cfg.lat, lo = u->cfg.lon;
     snprintf(buf, (size_t)sz, "%.2f%c %.2f%c", (double)fabsf(la), la < 0 ? 'S' : 'N', (double)fabsf(lo), lo < 0 ? 'W' : 'E');
+}
+
+// the radar's clock, 0: it is not shown. dashes till the board has heard the time
+static int clock_text(const ui_t *u, char *buf, int sz)
+{
+    if (!u->opt.clock || u->cfg.look != LOOK_RADAR) return 0;
+    uint32_t s = u->net.utc % 86400u;
+    if (u->net.utc) snprintf(buf, (size_t)sz, "%02u:%02u UTC", (unsigned)(s / 3600u), (unsigned)(s / 60u % 60u));
+    else snprintf(buf, (size_t)sz, "--:-- UTC");
+    return 1;
 }
 
 // where the planes come from and how fresh they are, or what is wrong. bad: say it in the alarm colour
@@ -1253,6 +1417,19 @@ static void corners(ui_t *u, canvas_t *cv)
         if (u->cfg.up) snprintf(buf, sizeof buf, "UP %03d*", u->cfg.up);
         micro_text(cv, PX - 9 - micro_width(up, 1), LOOK_Y + LOOK_H + 4, up, u->cfg.up ? C_FOCUS : C_QUIET, 235, 1);
     }
+    if (gfx_touches(cv, CLOCK_Y, CLOCK_Y + 6) && clock_text(u, buf, sizeof buf))
+        micro_text(cv, 9, CLOCK_Y, buf, C_DIM, 230, 1);
+#if RADAR_HAS_TOUCH
+    if (gfx_touches(cv, GEAR_Y, GEAR_Y + GEAR_W)) {       // the radar's options: a cog in a button
+        const float cx = GEAR_X + GEAR_W / 2.0f, cy = GEAR_Y + GEAR_W / 2.0f, r = GEAR_W * 0.2f;
+        button(cv, GEAR_X, GEAR_Y, GEAR_W, GEAR_W, "", u->t_down && !u->t_moved && u->t_hit == HIT_GEAR ? 2 : 0);
+        for (int i = 0; i < 8; i++) {
+            float a = (float)i * 45.0f * D2R;
+            gfx_line(cv, cx + r * sinf(a), cy - r * cosf(a), cx + r * 1.65f * sinf(a), cy - r * 1.65f * cosf(a), 2.0f, C_FOCUS, 245);
+        }
+        gfx_ring(cv, cx, cy, r, 1.8f, C_FOCUS, 245);
+    }
+#endif
     if (gfx_touches(cv, GFX_H - 31, GFX_H)) {             // the height legend, and how the fingers work the scope
         static const char *const L[4] = { "GND", "<10K", "<25K", "HIGH" };
         const uint32_t C[4] = { C_DIM, C_LOW, C_PRIM, C_FOCUS };
@@ -1352,55 +1529,90 @@ static void panel_overview(ui_t *u, canvas_t *cv)
     buttons(u, cv, "HUE", "LIST", "SET", -1);
 }
 
+/* the picked plane's rows. the 3.5" panel is nearly twice as wide: it takes the bigger fonts */
+#define PANEL_BIG (GFX_H >= 320)
+#define PROW_H    (PANEL_BIG ? 19 : 13)
+#define PROW_KEY  (PANEL_BIG ? 36 : 20)
+
+// a row: what it is, quiet, and its value. most wanted first: what finds no room stays out
+static int panel_row(canvas_t *cv, int y, const char *key, const char *value, uint32_t c)
+{
+    if (y + PROW_H > BTN_Y) return y;
+    if (gfx_touches(cv, y, y + PROW_H)) {
+        if (PANEL_BIG) font_text(cv, &FONT_SMALL, TX, y + 3, key, C_DIM, 235);
+        else micro_text(cv, TX, y + 3, key, C_DIM, 235, 1);
+        font_text_clip(cv, PANEL_BIG ? &FONT_MEDIUM : &FONT_SMALL, TX + PROW_KEY,
+                       y, value, c, 250, TX2 - TX - PROW_KEY);
+    }
+    return y + PROW_H;
+}
+
 static void panel_plane(ui_t *u, canvas_t *cv, const plane_t *p)
 {
     char buf[32], b2[16];
+    const int metres = u->cfg.alt_unit == ALT_M;
     uint32_t col = alt_colour(u, p);
     panel_title(cv, "TRACKING", kind_name(p->kind));
-    font_text_clip(cv, &FONT_MEDIUM, TX, 19, p->flight[0] ? p->flight : "NO CALLSIGN", C_FOCUS, 255, PW - 10);
+    font_text_clip(cv, &FONT_MEDIUM, TX, 19, p->flight[0] ? p->flight : "NO CALLSIGN", C_FOCUS, 255, PW - 10);   // the large font is digits only
     snprintf(buf, sizeof buf, "%s %s", p->type[0] ? p->type : "----", p->reg);
-    font_text_clip(cv, &FONT_SMALL, TX, 34, buf, C_DIM, 235, PW - 10);
-    int y = 46;
+    font_text_clip(cv, PANEL_BIG ? &FONT_MEDIUM : &FONT_SMALL, TX, PANEL_BIG ? 36 : 34, buf, C_DIM, 235, PW - 10);
+    int y = PANEL_BIG ? 52 : 46;
     if (p->orig[0] || p->dest[0]) {
         snprintf(buf, sizeof buf, "%s > %s", p->orig[0] ? p->orig : "?", p->dest[0] ? p->dest : "?");
         micro_text(cv, TX, y + 1, buf, C_PRIM, 240, 2);
         y += 14;
     }
-    // the height, big, with climbing or descending beside it
-    micro_text(cv, TX, y + 2, u->cfg.alt_unit == ALT_M ? "ALTITUDE, M" : "ALTITUDE, FT", C_QUIET, 230, 1);
+    // the height, big
+    micro_text(cv, TX, y + 2, metres ? "ALTITUDE, M" : "ALTITUDE, FT", C_QUIET, 230, 1);
     if (p->ground || !p->has_alt) {
         micro_text(cv, TX, y + 12, p->ground ? "ON GROUND" : "NO DATA", col, 245, 2);
     } else {
-        int v = u->cfg.alt_unit == ALT_M ? (int)lroundf(p->alt * 0.3048f) : (int)p->alt;
-        snprintf(buf, sizeof buf, "%d", v);
+        snprintf(buf, sizeof buf, "%d", metres ? (int)lroundf(p->alt * 0.3048f) : (int)p->alt);
         font_text(cv, &FONT_LARGE, TX - 1, y + 9, buf, col, 255);
     }
     y += 38;
-    if (abs(p->vrate) >= 200) {
-        float ax = TX + 3.0f, ay = y + 3.0f;
-        if (p->vrate > 0) gfx_tri(cv, ax - 3, ay + 3, ax + 3, ay + 3, ax, ay - 3, col, 240);
-        else gfx_tri(cv, ax - 3, ay - 3, ax + 3, ay - 3, ax, ay + 3, col, 240);
-        int vr = u->cfg.alt_unit == ALT_M ? (int)lroundf(abs(p->vrate) * 0.3048f) : abs(p->vrate);
-        snprintf(buf, sizeof buf, "%d %s", vr, u->cfg.alt_unit == ALT_M ? "M/MIN" : "FT/MIN");
-        micro_text(cv, TX + 9, y + 1, buf, C_DIM, 230, 1);
-    } else {
-        micro_text(cv, TX, y + 1, "LEVEL", C_DIM, 230, 1);
-    }
-    y += 10;
-    snprintf(buf, sizeof buf, "%d KT  %03d*", (int)lroundf(p->gs), (int)lroundf(p->track) % 360);
-    micro_text(cv, TX, y + 1, p->has_spd ? buf : "SPEED ---", C_PRIM, 240, 1);
-    y += 10;
-    fmt_dist(u, p->dist, b2, sizeof b2);
-    snprintf(buf, sizeof buf, "%s %s %03d*", b2, compass8(p->brg), (int)lroundf(p->brg) % 360);
-    micro_text(cv, TX, y + 1, buf, C_PRIM, 240, 1);
-    y += 10;
+    // and what is known of it, most wanted first
     if (p->squawk == 7500 || p->squawk == 7600 || p->squawk == 7700) {
         static const char *const W[3] = { "HIJACK", "RADIO LOST", "EMERGENCY" };
-        snprintf(buf, sizeof buf, "%04u %s", (unsigned)p->squawk, W[p->squawk == 7500 ? 0 : p->squawk == 7600 ? 1 : 2]);
-        micro_text(cv, TX, y + 1, buf, C_ALARM, 255, 1);
-    } else if (p->squawk) {
-        snprintf(buf, sizeof buf, "SQUAWK %04u", (unsigned)p->squawk);
-        micro_text(cv, TX, y + 1, buf, C_DIM, 230, 1);
+        snprintf(b2, sizeof b2, "%04u", (unsigned)p->squawk);
+        y = panel_row(cv, y, b2, W[p->squawk == 7500 ? 0 : p->squawk == 7600 ? 1 : 2], C_ALARM);
+    }
+    if (!p->ground) {
+        int vr = metres ? (int)lroundf(p->vrate * 0.3048f) : p->vrate;
+        if (abs(p->vrate) >= 200) snprintf(buf, sizeof buf, "%+d %s", vr, metres ? "M/M" : "FPM");
+        else snprintf(buf, sizeof buf, "LEVEL");
+        y = panel_row(cv, y, "V/S", buf, col);
+    }
+    if (p->sel_fl || p->sel_hdg) {                     // what the crew set on the autopilot
+        b2[0] = 0;
+        if (p->sel_fl) fmt_height(u, p->sel_fl * 100, b2, sizeof b2);
+        if (p->sel_hdg) snprintf(buf, sizeof buf, "%s%s%03u\xC2\xB0", b2, b2[0] ? " " : "", (unsigned)p->sel_hdg);
+        else snprintf(buf, sizeof buf, "%s", b2);
+        y = panel_row(cv, y, "A/P", buf, C_PRIM);
+    }
+    if (p->has_spd) {
+        snprintf(buf, sizeof buf, "%d KT", (int)lroundf(p->gs));
+        y = panel_row(cv, y, "GS", buf, C_PRIM);
+        snprintf(buf, sizeof buf, "%03d\xC2\xB0", (int)lroundf(p->track) % 360);
+        y = panel_row(cv, y, "TRK", buf, C_PRIM);
+    }
+    if (p->ias || p->mach) {
+        b2[0] = 0;
+        if (p->ias) snprintf(b2, sizeof b2, "%u ", (unsigned)p->ias);
+        if (p->mach) snprintf(buf, sizeof buf, "%sM.%02u", b2, (unsigned)(p->mach + 5) / 10u);
+        else snprintf(buf, sizeof buf, "%sKT", b2);
+        y = panel_row(cv, y, "IAS", buf, C_PRIM);
+    }
+    if (p->wind_dir) {
+        snprintf(buf, sizeof buf, "%03u\xC2\xB0 %u KT", (unsigned)p->wind_dir, (unsigned)p->wind_kt);
+        y = panel_row(cv, y, "WIND", buf, C_PRIM);
+    }
+    fmt_dist(u, p->dist, b2, sizeof b2);
+    snprintf(buf, sizeof buf, "%s %03d\xC2\xB0", b2, (int)lroundf(p->brg) % 360);
+    y = panel_row(cv, y, "DIST", buf, C_PRIM);
+    if (p->squawk) {
+        snprintf(buf, sizeof buf, "%04u", (unsigned)p->squawk);
+        y = panel_row(cv, y, "SQK", buf, C_DIM);
     }
     buttons(u, cv, "NEXT", "WATCH", "X", watched(u, p) ? 1 : -1);   // lit: on the watch list
 }
@@ -1488,6 +1700,10 @@ static void round_note(ui_t *u, canvas_t *cv)
     home_coords(u, c, sizeof c);
     snprintf(mid, sizeof mid, "%s  %d IN %s", c, n, d);
     sky_status(u, low, sizeof low, &bad);
+    if (clock_text(u, c, sizeof c)) {                  // the round glass has no corners for it
+        size_t l = strlen(low);
+        snprintf(low + l, sizeof low - l, "  %s", c);
+    }
     int wt = font_width(&FONT_SMALL, top), wm = micro_width(mid, 1), wl = micro_width(low, 1);
     int w = (wt > wm ? wt : wm);
     w = (w > wl ? w : wl) + 12;
@@ -1579,8 +1795,9 @@ void main_draw(ui_t *u, canvas_t *cv)
         compass(u, cv);
         ring_numbers(u, cv);
         ui_lap(u, cv, 2);
+        if (u->cfg.look == LOOK_RADAR) home_ring(u, cv);
         planes(u, cv);
-        home(u, cv);
+        if (u->cfg.look != LOOK_RADAR) home(u, cv);    // the round glass: its maps keep the pin
         attribution(u, cv);
         gesture(u, cv);
         ui_lap(u, cv, 3);
@@ -1658,6 +1875,9 @@ int main_hit(const ui_t *u, int x, int y)
     } else if (y < ly && x >= lx - 12 && x < PX - 2) {
         return HIT_LOOK;
     }
+#if RADAR_HAS_TOUCH
+    if (!square_look(u) && in_box(x, y, GEAR_X - 8, GEAR_Y - 8, GEAR_W + 16, GEAR_W + 16)) return HIT_GEAR;
+#endif
     if (x < PX - 2) {
         int dx = x - SCX, dy = y - SCY;
         return dx * dx + dy * dy <= (SR + 6) * (SR + 6) ? HIT_SCOPE : HIT_NONE;

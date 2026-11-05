@@ -1,11 +1,13 @@
 #include "net.h"
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "esp_crt_bundle.h"
 #include "esp_event.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_netif_sntp.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -179,6 +181,22 @@ void net_reconnect(const secrets_t *s)
 int net_up(void) { return s_up; }
 
 void net_ip(char *buf, int cap) { snprintf(buf, (size_t)cap, "%s", s_ip); }
+
+void net_time_start(void)
+{
+    static int started;
+    if (started) return;
+    started = 1;
+    esp_sntp_config_t c = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+    esp_netif_sntp_init(&c);
+    ESP_LOGI(TAG, "asking for the time");
+}
+
+uint32_t net_utc(void)
+{
+    time_t t = time(NULL);
+    return t > 1700000000 ? (uint32_t)t : 0;          // not set yet, it counts from 1970
+}
 
 int net_get(const char *url, const char *bearer, net_sink_fn sink, void *ctx, int *status)
 {

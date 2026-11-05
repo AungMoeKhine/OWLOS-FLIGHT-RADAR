@@ -126,9 +126,24 @@ The pictures are the 3.5" board, the 2.8" one has the same screens a little smal
 
 ![The settings page with arrows to its buttons](shots/guide/setup.png)
 
-- Three tabs on the bar: **VIEW** the range, units, map up, the screen upside down, labels, colours, the
-  look, the map and the touch alignment; **DATA** planes on the ground shown or hidden, the watch list,
-  where the planes come from, home, the WiFi and ABOUT; **LED** the light on the back (2.8" and 3.5" CYD).
+- Tabs on the bar: **VIEW** the range, units, map up, the screen upside down, labels, colours, the look,
+  the map and the touch alignment; **DATA** planes on the ground shown or hidden, the watch list, where the
+  planes come from, home, the WiFi and ABOUT; **RADAR** the radar look's options; **LED** the light on the
+  back (2.8" and 3.5" CYD).
+- **The gear** under the scope opens the RADAR tab. On the round glass these rows are under VIEW. All of it
+  is off until you turn it on, and all of it is for the radar look only:
+  - **LOWEST** and **HIGHEST**: only planes between these two heights. The picked plane stays.
+  - **DATA BLOCK**: the label says climbing or coming down, and the speed in tens of knots.
+  - **AUTOPILOT**: the label says the height set on the autopilot, when the plane sends it: `FL280>350`.
+  - **VECTORS**: a line ahead of each plane, its length says how fast.
+  - **BEAM STEPS**: a plane moves only when the beam goes over it, as on a real scope.
+  - **CLOCK**: the time in UTC, which the board asks from pool.ntp.org only while this is on.
+  - **LOST PLANES**: a plane with no position for 12 seconds goes dim and says CST, for coasting.
+  - **CONFLICT**: two planes over 5000 ft that will come closer than 3 NM and 1000 ft within two minutes
+    blink red with a line between them. This is a toy: it is public data, and nothing to act on.
+- A picked plane's panel shows all that is known of it: the height, climb, what is set on the autopilot,
+  ground speed, track, airspeed and Mach, the wind where it is, distance, squawk. Not every plane sends all
+  of it, and Flightradar24's data has none of what the plane says of itself.
 - **Tap a button** to change it, **minus and plus** for numbers. Drag to see the rest.
 
 ### No WiFi yet: the demo
@@ -283,12 +298,15 @@ The site talks to the board over the USB cable at 115200 baud, a line each way. 
 - `OWLOS HELLO` is answered with `OWLOS READY flight-radar <version>`.
 - `OWLOS GET` is answered with `OWLOS CFG {...}`: the network's name, home (`lat`, `lon`, `place`,
   `country`), `src`, whether a `key` is stored, `up`, `flip`, `theme`, `look`, `map`, `ground`, `watch`,
-  `led`, `led_level`, `led_hold`, `led_near`, `led_red`, `version`, `newest` (the site's, `""` not heard
+  `vectors`, `beam_step`, `clock`, `block`, `autopilot`, `lost`, `conflict`, `fl_lo`, `fl_hi`, `utc` (seconds
+  since 1970, 0 not known), `led`, `led_level`, `led_hold`, `led_near`, `led_red`, `version`, `newest` (the site's, `""` not heard
   yet), `uptime` and `ran` in seconds, `reset`, and `screen` on the
   2.8" boards. Never the password, never the key.
 - `OWLOS SET {...}` with any of `ssid`, `pass`, `key`, `lat`, `lon`, `place`, `country`, `src` (`free` or
   `fr24`), `up` (degrees), `flip`, `theme` (0 to 4), `look` (0 radar, 1 map, 2 classic), `map`, `ground`
-  (1 planes on the ground shown, 0 hidden), `watch` (`"EZY12AB, G-EUPT"`, `""` empties it), `led` (what
+  (1 planes on the ground shown, 0 hidden), `vectors`, `beam_step`, `clock`, `block`, `autopilot`, `lost`,
+  `conflict` (each 1 on, 0 off), `fl_lo`, `fl_hi` (flight levels, 0 no limit), `watch`
+  (`"EZY12AB, G-EUPT"`, `""` empties it), `led` (what
   lights it, added up: 1 SOS, 2 in range, 4 take-off, 8 landing, 16 any near, 32 no data), `led_near`
   (1, 2, 5 or 10 of the distance unit), `led_level` (0 low, 1 mid,
   2 high), `led_hold` (0 till touched, 1 10 s, 2 while it lasts), `led_red` (4 or 22, the red one's GPIO),

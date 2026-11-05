@@ -183,6 +183,10 @@ int main(int argc, char **argv)
     ui.cfg.range = 50;
     fly(30);
     shot("02-live");
+    ui.opt.vectors = ui.opt.beam_step = ui.opt.clock = ui.opt.block = ui.opt.autopilot = 1;   // the radar's options
+    ui.net.utc = 14 * 3600 + 32 * 60;
+    shot("42-radar-options");
+    ui.opt.vectors = ui.opt.beam_step = ui.opt.clock = ui.opt.block = ui.opt.autopilot = 0;
     pick("OWL77H");
     shot("03-picked-heavy");
     pick("OWL205");
@@ -304,11 +308,15 @@ int main(int argc, char **argv)
     drag(120, 180, 120, 40);
     drag(120, 180, 120, 40);
     shot("11-setup-more");
-    const int tabs = RADAR_HAS_LED ? 3 : 2;          // the bar: VIEW DATA (LED) BACK
+    const int tabs = (RADAR_ROUND ? 2 : 3) + (RADAR_HAS_LED ? 1 : 0);   // the bar: VIEW DATA (RADAR) (LED) BACK
     press_bar(1, tabs + 1);
     shot("10-setup-data");
-#if RADAR_HAS_LED
+#if !RADAR_ROUND
     press_bar(2, tabs + 1);
+    shot("10-setup-radar");
+#endif
+#if RADAR_HAS_LED
+    press_bar(3, tabs + 1);
     shot("10-setup-led");
 #endif
     press_bar(0, tabs + 1);                          // VIEW again, as it was

@@ -11,6 +11,9 @@ void net_reconnect(const secrets_t *s);      // new WiFi settings, from the site
 int  net_up(void);                           // 1 = connected, has an address
 int  net_why(void);                          // WHY_*: the network set is not up because
 void net_ip(char *buf, int cap);
+/* the time, for the radar's clock. nothing asks a time server until the clock is turned on */
+void     net_time_start(void);               // again does nothing: it keeps itself right from then on
+uint32_t net_utc(void);                      // seconds since 1970, 0: not known yet
 /* the screen's WiFi page: look round for networks. request starts it, poll (each frame) gets
  * it going when the driver lets it, get copies the list and says SCAN_* */
 void net_scan_request(uint32_t now);

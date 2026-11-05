@@ -166,6 +166,14 @@ void store_load_light(light_cfg_t *c)
 
 void store_save_light(const light_cfg_t *c) { save_blob("light", c, sizeof *c); }
 
+void store_load_opt(scope_opt_t *o)
+{
+    if (load_blob(NS, "scope", o, sizeof *o) && o->version == SCOPE_OPT_VERSION) return;
+    scope_opt_defaults(o);
+}
+
+void store_save_opt(const scope_opt_t *o) { save_blob("scope", o, sizeof *o); }
+
 uint32_t store_load_ran(void)
 {
     nvs_handle_t h;
