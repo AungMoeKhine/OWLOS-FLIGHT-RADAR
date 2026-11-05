@@ -105,7 +105,7 @@ static void unlock(void) { xSemaphoreGive(s_lock); }
  * airplanes.live and adsb.one used to be here: both now answer 403 to anyone not let in */
 static const char *const FREE_URL[FREE_SERVERS] = {
     "https://api.adsb.lol/v2/point/%.2f/%.2f/%d",
-    "https://opendata.adsb.fi/api/v2/lat/%.2f/lon/%.2f/dist/%d",
+    "https://opendata.adsb.fi/api/v3/lat/%.2f/lon/%.2f/dist/%d",
 };
 static const char *const FREE_NAME[FREE_SERVERS] = { "ADSB.LOL", "ADSB.FI" };
 
@@ -933,7 +933,9 @@ static void ui_task(void *arg)
 #endif
         if (ev) ui_button(&s_ui, ev == BTN_LONG ? 2 : 1, &cmd);
         touch_sample(1);
-        if (s_nts || ev) {                             // a finger or BOOT: what the LED shows is seen, it goes out
+        int finger = 0;                                // a sample comes every frame, with a finger or without
+        for (int i = 0; i < s_nts; i++) finger |= s_ts[i].down;
+        if (finger || ev) {                            // a finger or BOOT: what the LED shows is seen, it goes out
             lock();
             light_touch(&s_light);
             unlock();

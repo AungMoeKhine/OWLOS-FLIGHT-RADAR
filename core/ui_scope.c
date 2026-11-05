@@ -515,6 +515,10 @@ void scope_frame(ui_t *u)
         used[nu++] = (box_t){ SCX - 42, SCY + PR - 18, 84, 12 };
     }
 #endif
+    {
+        const int s = (int)(plane_size() * 8.0f);       // the pin on home: a label under it can't be read
+        used[nu++] = (box_t){ view_cx(u) - s, SCY - s * 5 / 2, s * 2, s * 5 / 2 + 2 };
+    }
     for (int k = 0; k < u->n_order; k++) {
         const spot_t *sp = &u->spot[u->order[k]];
         if (sp->vis == 1) used[nu++] = (box_t){ sp->x - 6, sp->y - 6, 12, 12 };
@@ -614,12 +618,21 @@ static void ring_numbers(ui_t *u, canvas_t *cv)
 
 #define INK RGB(16, 20, 30)            /* outlines on the classic map's light ground */
 
+/* where you are: a pin, its tip on home, over the planes. a colour of its own and a dark edge on
+ * every ground: the map is full of white roads and white planes, and a small white ring got lost
+ * among them. the head's radius, the side and the tip to the head's middle are a 5 12 13 triangle */
 static void home(ui_t *u, canvas_t *cv)
 {
-    const float cx = (float)view_cx(u);
-    if (u->cfg.look == LOOK_CLASSIC) gfx_ring(cv, cx, SCY, 4.5f, 3.2f, INK, 170);
-    gfx_ring(cv, cx, SCY, 4.5f, 1.2f, C_FOCUS, 230);
-    gfx_disc(cv, cx, SCY, 1.5f, C_FOCUS, 255);
+    const float s = plane_size(), x = (float)view_cx(u), y = (float)SCY;
+    const float r = 5.0f * s, hy = y - 13.0f * s;      // the head
+    const float tx = 4.615f * s, ty = y - 11.077f * s; // where the sides meet it
+    if (!gfx_touches(cv, (int)(hy - r - 3), (int)(y + 3))) return;
+    gfx_disc(cv, x, hy, r + 1.4f, INK, 255);
+    gfx_line(cv, x, y, x - tx, ty, 2.8f, INK, 255);
+    gfx_line(cv, x, y, x + tx, ty, 2.8f, INK, 255);
+    gfx_tri(cv, x, y, x - tx, ty, x + tx, ty, C_HOME, 255);
+    gfx_disc(cv, x, hy, r, C_HOME, 255);
+    gfx_disc(cv, x, hy, r * 0.4f, INK, 255);
 }
 
 /* --- the flat looks: meridians and parallels, a round number of degrees or minutes apart --- */
@@ -1541,9 +1554,9 @@ void main_draw(ui_t *u, canvas_t *cv)
         sq_ground(u, cv);
         grid_draw(u, cv);
         ui_lap(u, cv, 1);
-        home(u, cv);
         ui_lap(u, cv, 2);
         planes(u, cv);
+        home(u, cv);
         gesture(u, cv);
         ui_lap(u, cv, 3);
         sq_chrome(u, cv);
@@ -1565,9 +1578,9 @@ void main_draw(ui_t *u, canvas_t *cv)
         ui_lap(u, cv, 1);
         compass(u, cv);
         ring_numbers(u, cv);
-        home(u, cv);
         ui_lap(u, cv, 2);
         planes(u, cv);
+        home(u, cv);
         attribution(u, cv);
         gesture(u, cv);
         ui_lap(u, cv, 3);

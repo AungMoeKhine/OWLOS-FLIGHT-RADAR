@@ -4,6 +4,14 @@ What changed in each version of OWLOS Flight Radar, the newest first. The first 
 version: the firmware is built with it, the site publishes it, and a board compares its own with it.
 The site keeps the firmware of each version: a new number here keeps the one before it as it was.
 
+## 0.5
+
+- Home is a pin now, in a colour nothing else on the screen has, with a dark edge, over the planes. The
+  ring it used to be got lost on a map full of white roads and white planes.
+- The planes from adsb.fi come from its new address: the old one is on its way out.
+- Fixed: the LED on the back lights for what you picked. Since 0.3 it was put out on every frame, as if
+  the screen had been touched, so only TEST ever showed.
+
 ## 0.4
 
 - Three more boards, each asked for by people who have one, none run here yet: the LCDWIKI ES3C28P

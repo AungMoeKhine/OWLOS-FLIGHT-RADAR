@@ -12,12 +12,13 @@
  * focus  what you read first: north, the picked plane, the highest planes (cruise)
  * dim    secondary text, planes on the ground
  * low    planes under 10 000 ft: climbing out, coming in to land
- * alarm  emergency squawks (7500 7600 7700) and errors */
+ * alarm  emergency squawks (7500 7600 7700) and errors
+ * home   the pin on home, and nothing else: so it differs from theme to theme */
 typedef struct {
     const char *name;
     uint32_t bg0, bg1, glass, panel;
     uint32_t prim, quiet, focus, dim;
-    uint32_t low, alarm;
+    uint32_t low, alarm, home;
 } theme_t;
 
 extern const theme_t UI_THEME[UI_THEMES];
@@ -33,6 +34,7 @@ extern const theme_t *TH;
 #define C_DIM    (TH->dim)
 #define C_LOW    (TH->low)
 #define C_ALARM  (TH->alarm)
+#define C_HOME   (TH->home)
 
 /* --- layout: the scope on the left, the panel on the right, like the WiFi radar, sized from the
  * screen. 320x240: scope at 114,120 r 108, panel at 228, 91 wide. 480x320: 154,160 r 148, panel

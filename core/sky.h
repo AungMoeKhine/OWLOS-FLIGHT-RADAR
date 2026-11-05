@@ -2,7 +2,7 @@
  * sky - the aircraft around home. no network here: the firmware fetches the JSON and hands it
  * to sky_read piece by piece as it comes in, the PC preview makes it up. two formats:
  *   ADS-B Exchange v2   {"ac":[{"hex":..,"flight":..,"lat":..,"lon":..,"alt_baro":..}, ..]}
- *                       spoken by the free networks: adsb.lol as is, adsb.fi calls the list "aircraft"
+ *                       spoken by the free networks. adsb.fi's old v2 called the list "aircraft"
  *   Flightradar24 API   {"data":[{"hex":..,"callsign":..,"lat":..,"lon":..,"alt":..}, ..]}
  *                       paid, with a key, adds where the flight comes from and goes to
  * the list keeps the nearest SKY_MAX, merges every answer into what it had (so each plane keeps

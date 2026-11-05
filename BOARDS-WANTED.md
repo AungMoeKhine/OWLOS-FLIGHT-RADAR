@@ -85,6 +85,32 @@ on the site; none of the built ones here has been run on that board yet unless i
 - LCDWIKI's 3.5" twin, E32R35T, is the same story: every pin as the 3.5" build, red on IO22. The 3.5"
   here turned out to be one: red lit with GPIO 22 alone held low (2026-11-03).
 
+## "Bruce CYD 2432S028" kits on AliExpress
+
+- Asked 2026-11-04: a listing "ESP32 Bruce CYD 2432S028 ... NFC PN532 GNSS ATGM336H". It reads as the
+  plain 2.8" CYD sold for the Bruce firmware, with add-on modules: the 2.8" CYD build, nothing to build.
+  Not run on one here, and the listing does not say R (resistive) or C (capacitive): the build is for R.
+- Bruce's own setup (boards/CYD-2432S028) has the PN532 on I2C 27/22, which the radar leaves alone, and
+  the GPS on TX/RX, GPIO 1 and 3: the UART of the USB port. A GPS plugged in there talks over the
+  flashing and over step 2, so it comes off for both. The radar uses neither module.
+
+## A bigger screen on an ESP32-S3: not built
+
+- Asked 2026-11-04 in the group: can it run on an ESP32-S3 with a larger TFT? Named: "ILI9488 TFT's or a
+  Guition ESP32-S3 JC8048W550", and "it works great, just needs a bigger display size option". Which
+  one the asker owns, and whether they would test, is not known yet.
+- ILI9488, 480x320: the 3.5" CYD's picture size, so the screens are drawn already. The asker has one
+  wired to an ESP32-S3 and will rewire it if we want other pins. From their drawing, a small picture,
+  so not sure of every digit: 3.3V, GND, CS 10, RST 15, D/C 9, SDI 11, SCK 12, BL 8; XPT2046 touch TCK 14,
+  TCS 18, TDI 17, TDO 47; SDO and PEN not connected; the SD card's wires go off the picture.
+- New in the firmware for it: 18-bit pixels over SPI (3 bytes a pixel, not 2), the screen's reset on a
+  GPIO (lcd_spi.c only sends the software reset now), the XPT2046 with no pen interrupt pin. Still to
+  learn: the digits confirmed, which S3 board (flash, PSRAM), 3.5" or 4.0", whether they would test.
+- Guition JC8048W550, 5", 800x480: ESP32-S3 N16R8, ST7262 by a shop's listing, CH340. Two new things:
+  the RGB parallel bus, a whole frame in PSRAM instead of strips, and 800x480, a size the screens have
+  no layout for. The hardest kind on the list below. Missing: the pins, and which touch it has (GT911
+  is likely, not confirmed; one manual lists a version without touch).
+
 ## Others on sale, nobody asked yet
 
 Looked up 2026-11-03 to see what else people build things like this on. Pins are in the board JSONs
