@@ -8,9 +8,11 @@
 
 /* how the picture gets out:
  *   DISP_LCD_SPI   esp_lcd SPI panel IO, 8 bit commands (ILI9341, ST7796, GC9A01)
+ *   DISP_LCD_RGB   a frame in the PSRAM on the S3's 16-bit RGB bus (the 5" boards, lcd_rgb.c)
  *   DISP_ILI9486   raw SPI, every byte padded to 16 bits (RPi LCD with shift registers)
  *   DISP_EPD       SSD1683 e-paper, bit-banged, 1 bit a pixel (core/paper.c)
- * touch: TOUCH_XPT_BITBANG, TOUCH_XPT_SPI (on the LCD bus), TOUCH_CST816, TOUCH_FT6336, or none */
+ * touch: TOUCH_XPT_BITBANG, TOUCH_XPT_SPI (on the LCD bus), TOUCH_CST816, TOUCH_FT6336, TOUCH_GT911,
+ * or none */
 
 #if RADAR_DISPLAY == DISPLAY_ILI9341_320x240
 /* ESP32-2432S028R "cheap yellow display". the one this was written on, all of it works */
@@ -214,6 +216,58 @@
 #define PIN_T_RST     48        // TP_RST on the schematic; its TP_INT is 47, touch.c asks the chip instead
 #define PIN_BUTTON     0        // BOOT
 
+#elif RADAR_DISPLAY == DISPLAY_CROWADV50_800x480
+/* Elecrow CrowPanel Advance 5.0" HMI (DIS02050A), ESP32-S3-WROOM-1 N16R8, 800x480 IPS on the RGB bus
+ * (ST7262), GT911 capacitive touch. pins from Elecrow's repository (Elecrow-RD/CrowPanel-Advance-5-
+ * HMI-ESP32-S3-AI-Powered-IPS-Touch-Screen-800x480): its LovyanGFX setups for V1.0 and V1.2, the
+ * same but for the clock, 21 MHz and 16; 16 in the V1.2 and V1.3 examples, Arduino and IDF. NOT run
+ * on one: experimental, a viewer asked for it. the backlight and the touch's reset are behind a
+ * chip of the board's own, lcd_rgb.c. its speaker, microphone and SD card are on pins shared
+ * through a switch on the board, none of them is driven here */
+#define DISP_LCD_RGB   1
+#define LCD_RGB_DATA   21, 47, 48, 45, 38,  9, 10, 11, 12, 13, 14,  7, 17, 18, 3, 46   // blue, green, red, lowest bit first
+#define PIN_LCD_HSYNC 40
+#define PIN_LCD_VSYNC 41
+#define PIN_LCD_DE    42
+#define PIN_LCD_PCLK  39
+#define LCD_RGB_HZ    (16 * 1000 * 1000)
+#define LCD_BOARD_CHIP 1
+#define DISP_STRIP    16
+#define DISP_HELPER   1
+#define LCD_PROFILES   2
+#define LCD_ORDER      { 0, 1 }
+#define TOUCH_GT911    1
+#define PIN_I2C_SDA   15        // the touch, the board's own chip, a clock, the I2C socket
+#define PIN_I2C_SCL   16
+#define PIN_T_INT      1        // the touch's reset is on the board's own chip, this line only helps it wake
+#define PIN_BUTTON     0        // BOOT
+
+#elif RADAR_DISPLAY == DISPLAY_JC8048W550_800x480
+/* Guition JC8048W550C, 5": ESP32-S3 N16R8, 800x480 on the RGB bus (ST7262), GT911, a CH340. pins from
+ * one source so far, rzeldent/platformio-espressif32-sunton, JC8048W550C.json: the same as its
+ * ESP32-8048S050C. that file calls the low five data lines red, and every other setup for those
+ * pins has them blue: the bus's low five are blue, so these go in as listed. NOT run on one:
+ * experimental, a viewer asked for it. a version without touch is sold too */
+#define DISP_LCD_RGB   1
+#define LCD_RGB_DATA   8, 3, 46, 9, 1,  5, 6, 7, 15, 16, 4,  45, 48, 47, 21, 14   // blue, green, red, lowest bit first
+#define PIN_LCD_HSYNC 39
+#define PIN_LCD_VSYNC 41
+#define PIN_LCD_DE    40
+#define PIN_LCD_PCLK  42
+#define LCD_RGB_HZ    (16 * 1000 * 1000)
+#define PIN_LCD_BL     2        // high = lit
+#define DISP_STRIP    16
+#define DISP_HELPER   1
+#define LCD_PROFILES   2
+#define LCD_ORDER      { 0, 1 }
+#define TOUCH_GT911    1
+#define PIN_I2C_SDA   19        // the S3's own USB pins: this board has a CH340, they are free
+#define PIN_I2C_SCL   20
+#define PIN_T_RST     38
+#define PIN_T_INT     18
+#define NO_CHIP_USB    1
+#define PIN_BUTTON     0        // BOOT
+
 #elif RADAR_DISPLAY == DISPLAY_EPD_400x300 || RADAR_DISPLAY == DISPLAY_EPD_792x272
 /* Elecrow CrowPanel e-paper 4.2" (400x300) and 5.79" (792x272), ESP32-S3. NOT run on
  * hardware yet: panel pins and command sequences are ViewOwl's (ViewOwl.ESP32_EPD.Client),
@@ -259,6 +313,8 @@
 #define TOUCH_RAW_SPAN 240
 #elif TOUCH_FT6336
 #define TOUCH_RAW_SPAN 320      // it counts screen pixels, 240x320 standing
+#elif TOUCH_GT911
+#define TOUCH_RAW_SPAN GFX_PW   // so does this one, lying down
 #else
 #define TOUCH_RAW_SPAN 3700
 #endif

@@ -43,30 +43,30 @@ static void fly(int seconds)
 }
 
 #define STRIP 24
-static uint32_t strip_px[GFX_W * STRIP];
-static uint16_t frame565[GFX_W * GFX_H];
+static uint32_t strip_px[GFX_PW * STRIP];
+static uint16_t frame565[GFX_PW * GFX_PH];
 
 static void render(void)
 {
     make_ground(&ui);
     ui.snap = sky;
     ui_frame(&ui, t_ms);
-    for (int y = 0; y < GFX_H; y += STRIP) {
-        canvas_t cv = { strip_px, y, y + STRIP <= GFX_H ? STRIP : GFX_H - y, 0 };
+    for (int y = 0; y < GFX_PH; y += STRIP) {
+        canvas_t cv = { strip_px, y, y + STRIP <= GFX_PH ? STRIP : GFX_PH - y, 0 };
         ui_strip(&ui, &cv);
-        gfx_pack565(&cv, frame565 + y * GFX_W);
+        gfx_pack565(&cv, frame565 + y * GFX_PW);
     }
 }
 
 static void shot(const char *name)
 {
     render();
-    const int zoom = 2, w = GFX_W * zoom, h = GFX_H * zoom;
+    const int zoom = GFX_SCALED ? 1 : 2, w = GFX_PW * zoom, h = GFX_PH * zoom;
     uint8_t *rgb = malloc((size_t)w * h * 3);
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++) {
-            uint16_t v = frame565[(y / zoom) * GFX_W + x / zoom];
-            v = (uint16_t)((v >> 8) | (v << 8));
+            uint16_t v = frame565[(y / zoom) * GFX_PW + x / zoom];
+            if (!RADAR_RGB_BUS) v = (uint16_t)((v >> 8) | (v << 8));
             uint8_t *o = rgb + ((size_t)y * w + x) * 3;
             o[0] = (uint8_t)(((v >> 11) & 31) * 255 / 31);
             o[1] = (uint8_t)(((v >> 5) & 63) * 255 / 63);

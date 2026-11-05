@@ -147,6 +147,8 @@ static void *iram_first(size_t bytes)
 {
 #if CONFIG_IDF_TARGET_ESP32
     return heap_caps_malloc(bytes, MALLOC_CAP_EXEC | MALLOC_CAP_32BIT);
+#elif DISP_LCD_RGB
+    return heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM);  // the 5": 190 KB, there is no such room in the RAM
 #else
     (void)bytes;
     return NULL;                                       // the C3's RAM is one: malloc does it
@@ -823,7 +825,7 @@ static void helper_task(void *arg)
 static void helper_set(int on)
 {
     if (on == (s_helper != NULL)) return;
-    const size_t px = GFX_W * DISP_STRIP * sizeof(uint32_t), dma = GFX_W * DISP_STRIP * sizeof(uint16_t) * 2;
+    const size_t px = GFX_PW * DISP_STRIP * sizeof(uint32_t), dma = GFX_PW * DISP_STRIP * sizeof(uint16_t) * 2;
     if (!on) {
         s_help_stop = 1;
         xSemaphoreGive(s_help_go);
@@ -873,7 +875,7 @@ static void pick_screen(int screen, uint32_t now, const char *by)
  * turns with it, so it needs no new crosses */
 static void screen_flip(int on)
 {
-#if DISP_LCD_SPI || DISP_ILI9486
+#if DISP_LCD_SPI || DISP_LCD_RGB || DISP_ILI9486
     disp_flip(on);
 #endif
 #if RADAR_TOUCH_CAL
@@ -899,11 +901,11 @@ static void ui_task(void *arg)
     disp_profile(screen);
     s_screen = screen;
 #endif
-#if DISP_LCD_SPI || DISP_ILI9486
+#if DISP_LCD_SPI || DISP_LCD_RGB || DISP_ILI9486
     disp_flip(c.flip);
 #endif
     disp_init();
-    uint32_t *work = heap_caps_malloc(GFX_W * DISP_STRIP * sizeof(uint32_t), MALLOC_CAP_INTERNAL);
+    uint32_t *work = heap_caps_malloc(GFX_PW * DISP_STRIP * sizeof(uint32_t), MALLOC_CAP_INTERNAL);
     if (!work || !ui_init(&s_ui, now_ms())) {
         ESP_LOGE(TAG, "not enough memory for the screen, free heap %u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT));
         vTaskDelete(NULL);
@@ -1097,13 +1099,13 @@ static void ui_task(void *arg)
 #endif
         int64_t t0 = esp_timer_get_time();
         ui_frame(&s_ui, now);
-        for (int sy0 = 0; sy0 < GFX_H; sy0 += step) {
-            canvas_t cv = { work, sy0, sy0 + DISP_STRIP <= GFX_H ? DISP_STRIP : GFX_H - sy0, 0 };
+        for (int sy0 = 0; sy0 < GFX_PH; sy0 += step) {
+            canvas_t cv = { work, sy0, sy0 + DISP_STRIP <= GFX_PH ? DISP_STRIP : GFX_PH - sy0, 0 };
 #if DISP_HELPER
-            const int y1 = sy0 + DISP_STRIP, two = s_helper && y1 < GFX_H;
+            const int y1 = sy0 + DISP_STRIP, two = s_helper && y1 < GFX_PH;
             if (two) {                                 // the strip under it, on the other core meanwhile
                 s_help_cv.y0 = y1;
-                s_help_cv.h = y1 + DISP_STRIP <= GFX_H ? DISP_STRIP : GFX_H - y1;
+                s_help_cv.h = y1 + DISP_STRIP <= GFX_PH ? DISP_STRIP : GFX_PH - y1;
                 xSemaphoreGive(s_help_go);
             }
             ui_strip(&s_ui, &cv);

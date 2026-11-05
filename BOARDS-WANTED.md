@@ -94,7 +94,7 @@ on the site; none of the built ones here has been run on that board yet unless i
   the GPS on TX/RX, GPIO 1 and 3: the UART of the USB port. A GPS plugged in there talks over the
   flashing and over step 2, so it comes off for both. The radar uses neither module.
 
-## A bigger screen on an ESP32-S3: not built
+## A bigger screen on an ESP32-S3: the Guition built, the ILI9488 not
 
 - Asked 2026-11-04 in the group: can it run on an ESP32-S3 with a larger TFT? Named: "ILI9488 TFT's or a
   Guition ESP32-S3 JC8048W550", and "it works great, just needs a bigger display size option". Which
@@ -106,10 +106,56 @@ on the site; none of the built ones here has been run on that board yet unless i
 - New in the firmware for it: 18-bit pixels over SPI (3 bytes a pixel, not 2), the screen's reset on a
   GPIO (lcd_spi.c only sends the software reset now), the XPT2046 with no pen interrupt pin. Still to
   learn: the digits confirmed, which S3 board (flash, PSRAM), 3.5" or 4.0", whether they would test.
-- Guition JC8048W550, 5", 800x480: ESP32-S3 N16R8, ST7262 by a shop's listing, CH340. Two new things:
-  the RGB parallel bus, a whole frame in PSRAM instead of strips, and 800x480, a size the screens have
-  no layout for. The hardest kind on the list below. Missing: the pins, and which touch it has (GT911
-  is likely, not confirmed; one manual lists a version without touch).
+- Guition JC8048W550, 5", 800x480: built 2026-11-05, experimental, not run on one yet. ESP32-S3 N16R8,
+  ST7262, CH340. The same code as the CrowPanel Advance 5.0 below, the pins from one source so far,
+  JC8048W550C.json in rzeldent/platformio-espressif32-sunton, the same as its ESP32-8048S050C: HSYNC 39,
+  VSYNC 41, DE 40, PCLK 42 at 16 MHz, porches 8, pulse 4, back 8 both ways; data lines lowest first 8 3
+  46 9 1, 5 6 7 15 16 4, 45 48 47 21 14; backlight 2; GT911 on I2C SDA 19, SCL 20, reset 38, INT 18.
+  That file names the low five red, ESPHome's page for the plain CrowPanel 5.0 has those same pins blue;
+  the bus's low five are blue, so they go in as listed, with BGR behind BOOT in case. SDA and SCL are the
+  S3's own USB pins, so the console stays off that USB here. Missing: a second source. One manual
+  lists a version without touch.
+
+## Elecrow CrowPanel Advance 5.0": built 2026-11-05, experimental, not run on one yet
+
+- Asked 2026-11-05: "Any chance for a 5" board like an elecrow advanced 5"?" The second ask for 800x480,
+  after the Guition above. Whether the asker has one, and would test, is not known yet.
+- Elecrow's name: CrowPanel Advance 5.0-HMI ESP32 AI Display, DIS02050A. Not the plain CrowPanel 5.0,
+  whose pins are others (ESPHome's page is for that one).
+- ESP32-S3-WROOM-1 N16R8 (16 MB flash, 8 MB octal PSRAM), 800x480 IPS on a 16-bit RGB bus, ST7262, GT911
+  capacitive touch at 0x5D, USB-C through a CH340K to UART0. BOOT is GPIO 0.
+- Pins from Elecrow's repository
+  (github.com/Elecrow-RD/CrowPanel-Advance-5-HMI-ESP32-S3-AI-Powered-IPS-Touch-Screen-800x480), its
+  LovyanGFX setups for V1.0 and V1.2, the same but for the clock. Blue 21 47 48 45 38, green 9 10 11 12
+  13 14, red 7 17 18 3 46, DE 42, VSYNC 41, HSYNC 40, PCLK 39. Porches 8, pulse 4, back 8 both ways, the
+  clock idle high. 21 MHz on V1.0, 16 MHz in the V1.2 and V1.3 examples, Arduino and IDF. Touch on I2C
+  SDA 15, SCL 16, polled; its INT net is on GPIO 1. The V1.3 folder's hardware guide agrees and says a
+  model compiled it, so the code is the source here, not the guide.
+- The backlight and the touch's reset are not on the S3's pins, and it goes by board version, printed
+  on the board. V1.0: a PCA9557. V1.1: an STC8H1K28 at 0x30 on the same I2C, 0x05 off to 0x10 brightest,
+  and 0x10 must go first. V1.2 and V1.3: the same chip, 0 brightest to 245 off. A guess to try: 0x10
+  lights both V1.1 and V1.2 on. When 0x30 or 0x5D does not answer, Elecrow's examples send 250 to 0x30,
+  hold GPIO 1 low for 120 ms, let it go and wait 100 ms.
+- Built with: firmware/main/lcd_rgb.c, a frame of 768,000 bytes in PSRAM with bounce buffers as in
+  Elecrow's IDF example, 16 MHz, RGB and BGR behind BOOT. V1.0 is told by its PCA9557 answering at 0x18;
+  from V1.1 the chip at 0x30 gets 0x19 and 250 to wake the touch when it is silent, five times at most,
+  and 0x10 for the light, so there is no dimming. Elecrow's demos wait for ever, this goes on and says
+  so in the log.
+- The screens: the 3.5"'s layout half as big again (config.h GFX_SCALED, layout 534x320, glass 800x480).
+  core/gfx.c turns the layout's numbers into the glass's pixels, the disc and the map are drawn in the
+  glass's own, the fonts are baked half as big again (core/font_glass_*.c). tools/preview takes it:
+  BUILD.BAT crowadv50.
+- Doubt: on this bus the picture is read from PSRAM all the time, so WiFi and flash writes (the map's
+  tiles, the settings) can shake it. Whether they do here shows only on a real board. Elecrow's IDF
+  example runs PSRAM at 80 MHz; the repository also carries an Arduino build with it at 120.
+- No board here, and nothing here has this bus: the picture was seen in tools/preview, the driver only
+  compiled. Once it runs, the other 800x480 boards below are mostly pins.
+- Speed is a guess too: a frame has 2.5 times the pixels of the 3.5"'s. The second core draws in the radar
+  look only, as on the 3.5"; the maps may want it too.
+- Not driven: the speaker, the microphone and the SD card (GPIO 4 5 6 19 20, shared, picked by a switch
+  on the board), the buzzer, the RTC, the wireless socket.
+- To learn from the asker: have they got one, which version, does the picture come, are the colours
+  right, does the touch land where it is pressed, does the picture shake while the map loads.
 
 ## Others on sale, nobody asked yet
 

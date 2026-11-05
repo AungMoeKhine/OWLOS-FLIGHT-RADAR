@@ -12,6 +12,8 @@
 #define DISPLAY_ES3C28P_320x240  7   // LCDWIKI ES3C28P 2.8": ESP32-S3, ILI9341V, FT6336 touch
 #define DISPLAY_NMCYDC5_320x240  8   // NM-CYD-C5 2.8": ESP32-C5, ST7789, XPT2046 touch
 #define DISPLAY_CROWADV28_320x240 9  // Elecrow CrowPanel Advance 2.8": ESP32-S3, ST7789 IPS, FT6336 touch
+#define DISPLAY_CROWADV50_800x480 10 // Elecrow CrowPanel Advance 5.0": ESP32-S3, RGB bus, GT911 touch
+#define DISPLAY_JC8048W550_800x480 11 // Guition JC8048W550 5": ESP32-S3, RGB bus, GT911 touch
 
 #ifndef RADAR_DISPLAY
 #define RADAR_DISPLAY DISPLAY_ILI9341_320x240
@@ -36,8 +38,29 @@
 #define GFX_W 792
 #define GFX_H 272
 #define RADAR_EPAPER 1
+#elif RADAR_DISPLAY == DISPLAY_CROWADV50_800x480 || RADAR_DISPLAY == DISPLAY_JC8048W550_800x480
+/* the 5" boards: the 3.5"'s layout, everything half as big again on an 800x480 glass. GFX_W and
+ * GFX_H stay the layout's: the pages, the touch and every number in them go on as they are, and
+ * core/gfx.c puts it on the glass in the glass's own pixels (GFX_Z). 534 and not 533: its middle
+ * is the glass's middle, and the half pixel past the edge is clipped */
+#define GFX_W 534
+#define GFX_H 320
+#define GFX_PW 800
+#define GFX_PH 480
+#define GFX_SCALED 1
+#define RADAR_RGB_BUS 1              // a frame in memory read out by the chip: its own byte order
 #else
 #error "unknown RADAR_DISPLAY, see config.h"
+#endif
+
+/* the glass: on every other screen one pixel of the layout is one pixel of it */
+#ifndef GFX_SCALED
+#define GFX_SCALED 0
+#define GFX_PW GFX_W
+#define GFX_PH GFX_H
+#endif
+#ifndef RADAR_RGB_BUS
+#define RADAR_RGB_BUS 0
 #endif
 
 #ifndef RADAR_ROUND
@@ -51,7 +74,8 @@
  * need it anyway, and on the round one it finds out how the touch chip's axes sit */
 #define RADAR_TOUCH_CAL (RADAR_DISPLAY == DISPLAY_ILI9341_320x240 || RADAR_DISPLAY == DISPLAY_ST7796_480x320 || \
                          RADAR_DISPLAY == DISPLAY_GC9A01_240x240 || RADAR_DISPLAY == DISPLAY_ES3C28P_320x240 || \
-                         RADAR_DISPLAY == DISPLAY_NMCYDC5_320x240 || RADAR_DISPLAY == DISPLAY_CROWADV28_320x240)
+                         RADAR_DISPLAY == DISPLAY_NMCYDC5_320x240 || RADAR_DISPLAY == DISPLAY_CROWADV28_320x240 || \
+                         GFX_SCALED)
 
 /* the RPi LCD has no touch: BOOT does what it can there, the site sends the rest */
 #define RADAR_HAS_TOUCH RADAR_TOUCH_CAL
@@ -80,6 +104,10 @@
 #define RADAR_BOARD "2.8\" NM-CYD-C5, ESP32-C5"
 #elif RADAR_DISPLAY == DISPLAY_CROWADV28_320x240
 #define RADAR_BOARD "2.8\" CrowPanel Advance, S3"
+#elif RADAR_DISPLAY == DISPLAY_CROWADV50_800x480
+#define RADAR_BOARD "5\" CrowPanel Advance, S3"
+#elif RADAR_DISPLAY == DISPLAY_JC8048W550_800x480
+#define RADAR_BOARD "5\" Guition JC8048W550, S3"
 #else
 #define RADAR_BOARD "E-PAPER"
 #endif

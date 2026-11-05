@@ -3,7 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define WIN_PIECE  4096u                      /* the window in pieces the heap always has */
+/* the window in pieces the heap always has. 4 KB was not small enough: on the 3.5" with the square
+ * map a heap of 56 KB, broken up, had too few of them, every tile failed and every retry too */
+#define WIN_PIECE  1024u
 #define WIN_PIECES (32768u / WIN_PIECE)
 #define ROW_MAX    (1 + PNG_MAX_W * 4)        /* the filter byte, then RGBA at most */
 

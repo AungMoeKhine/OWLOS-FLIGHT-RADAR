@@ -13,6 +13,7 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
+#include "config.h"
 #include "png_decode.h"
 
 enum {
@@ -21,10 +22,10 @@ enum {
     M_NONE = 15                        /* nothing known there (yet) */
 };
 
-#define MAP_W_MAX     480              /* texels: the whole screen at most */
-#define MAP_H_MAX     320
+#define MAP_W_MAX     (GFX_SCALED ? GFX_PW : 480)   /* texels: the whole screen at most */
+#define MAP_H_MAX     (GFX_SCALED ? GFX_PH : 320)
 #define MAP_BAND      8                /* rows a piece */
-#define MAP_TILES_MAX 16
+#define MAP_TILES_MAX (GFX_SCALED ? 32 : 16)
 
 typedef struct { int z; int32_t x, y; } tile_id_t;   /* x may run off the world's edge: map_url wraps it */
 

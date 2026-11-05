@@ -24,9 +24,8 @@ int list_hit(const ui_t *u, int x, int y)
 void list_draw(ui_t *u, canvas_t *cv)
 {
     char buf[24];
-    int ya = cv->y0 > LIST_Y0 + LIST_HEAD ? cv->y0 : LIST_Y0 + LIST_HEAD, yb = cv->y0 + cv->h - 1 < LIST_Y1 - 1 ? cv->y0 + cv->h - 1 : LIST_Y1 - 1;
-    if (ya <= yb) {
-        canvas_t lc = { cv->px + (ya - cv->y0) * GFX_W, ya, yb - ya + 1, cv->helper };
+    canvas_t lc;
+    if (gfx_sub(cv, LIST_Y0 + LIST_HEAD, LIST_Y1 - 1, &lc)) {
         for (int k = 0; k < u->n_order; k++) {
             int y = list_y(u, k);
             if (!gfx_touches(&lc, y, y + LIST_ROW)) continue;
@@ -269,10 +268,9 @@ static void small_key(ui_t *u, canvas_t *cv, int x, int y, int hit, int plus)
 
 void setup_draw(ui_t *u, canvas_t *cv)
 {
-    int y1 = BAR_Y - 3;
-    int ya = cv->y0 > LIST_Y0 ? cv->y0 : LIST_Y0, yb = cv->y0 + cv->h - 1 < y1 ? cv->y0 + cv->h - 1 : y1;
-    if (ya <= yb) {
-        canvas_t lc = { cv->px + (ya - cv->y0) * GFX_W, ya, yb - ya + 1, cv->helper };
+    const int y1 = BAR_Y - 3;
+    canvas_t lc;
+    if (gfx_sub(cv, LIST_Y0, y1, &lc)) {
         char v[32], d[112];
         for (int k = 0, i; (i = row_at(u, k)) >= 0; k++) {
             int y = row_y(u, k);

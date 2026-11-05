@@ -7,7 +7,9 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "soc/soc_caps.h"
-#if SOC_USB_SERIAL_JTAG_SUPPORTED
+#include "board.h"
+#define CHIP_USB (SOC_USB_SERIAL_JTAG_SUPPORTED && !NO_CHIP_USB)   // the Guition 5" uses its pins for I2C
+#if CHIP_USB
 #include "hal/usb_serial_jtag_ll.h"
 #endif
 
@@ -44,7 +46,7 @@ static void uart_task(void *arg)
     }
 }
 
-#if SOC_USB_SERIAL_JTAG_SUPPORTED
+#if CHIP_USB
 /* the chip's own USB (S3, C3, C5): the log already goes out there as well as on UART0, this reads
  * what comes in. on the ES3C28P it is the only USB there is, the NM-CYD-C5 has it beside its CH340.
  * no driver: it would take over the log's way out too. the chip holds the host back while its
@@ -66,7 +68,7 @@ void console_start(console_line_fn fn)
 {
     s_fn = fn;
     s_one = xSemaphoreCreateMutex();
-#if SOC_USB_SERIAL_JTAG_SUPPORTED
+#if CHIP_USB
     xTaskCreate(usb_task, "console usb", 4096, NULL, 3, NULL);
 #endif
     // the log keeps writing to UART0 as it always did, this only adds the receiving side

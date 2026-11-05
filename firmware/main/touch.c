@@ -6,7 +6,8 @@
  *  CST816 capacitive on I2C (round board), FT6336 the same way (ES3C28P). their axes may not
  *    match the screen, that's fine, the 5 cross alignment in ui.c sorts out swaps and mirrors
  *    for every kind
- *  GT911 capacitive on I2C (3.5" CYD, C version), asked for before the XPT2046 of the R version
+ *  GT911 capacitive on I2C: the 3.5" CYD's C version, asked for before the XPT2046 of the R
+ *    version, and the 5" boards, where it is the only one
  * boards without touch get tp_read() that never presses
  */
 #include "touch.h"
@@ -15,10 +16,10 @@
 
 static const char *TAG = "touch";
 
-#if TOUCH_GT911_TOO
-/* GT911, capacitive, on the 3.5" CYD's C version (board.h). 16-bit register addresses, MSB
- * first. its address is 0x5D or 0x14, picked by the INT level at power on: both are asked, and
- * "911" at 0x8140 tells it is really one. it counts in screen pixels, portrait 320x480 */
+#if TOUCH_GT911_TOO || TOUCH_GT911
+/* GT911, capacitive (board.h). 16-bit register addresses, MSB first. its address is 0x5D or 0x14,
+ * picked by the INT level at power on: both are asked, and "911" at 0x8140 tells it is really one.
+ * it counts in screen pixels: portrait 320x480 on the 3.5", 800x480 lying down on the 5" */
 #include "i2c_bus.h"
 #include "esp_timer.h"
 
@@ -218,6 +219,32 @@ int tp_read(int *rx, int *ry)
     }
     return pressed;
 }
+
+#elif TOUCH_GT911
+#include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+void tp_init(void)
+{
+#ifdef PIN_T_RST
+    /* its reset is a GPIO of its own: INT low through it picks 0x5D. on the CrowPanel the board's
+     * own chip has done this by now (lcd_rgb.c) */
+    gpio_config_t out = { .pin_bit_mask = 1ULL << PIN_T_RST | 1ULL << PIN_T_INT, .mode = GPIO_MODE_OUTPUT };
+    gpio_config(&out);
+    gpio_set_level(PIN_T_INT, 0);
+    gpio_set_level(PIN_T_RST, 0);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    gpio_set_level(PIN_T_RST, 1);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    gpio_config_t in = { .pin_bit_mask = 1ULL << PIN_T_INT, .mode = GPIO_MODE_INPUT };
+    gpio_config(&in);
+    vTaskDelay(pdMS_TO_TICKS(60));
+#endif
+    if (!gt_find()) ESP_LOGW(TAG, "no GT911, going on without touch (BOOT button still works)");
+}
+
+int tp_read(int *rx, int *ry) { return s_gt ? gt_read(rx, ry) : 0; }
 
 #elif TOUCH_CST816 || TOUCH_FT6336
 /* the CST816 (round board) and the FT6336 (ES3C28P, CrowPanel Advance) give the first finger

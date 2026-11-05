@@ -8,6 +8,7 @@ rem displays: ili9341 (2.8" CYD, all three revisions, the default)  st7796 (3.5"
 rem           ili9486 (RPi LCD on OWLOSAirQuality)  gc9a01 (round 1.28", ESP32-C3)
 rem           es3c28p (LCDWIKI ES3C28P 2.8", ESP32-S3)  nmcydc5 (NM-CYD-C5 2.8", ESP32-C5)
 rem           crowadv28 (Elecrow CrowPanel Advance 2.8", ESP32-S3)
+rem           crowadv50 (Elecrow CrowPanel Advance 5.0", ESP32-S3)  jc8048w550 (Guition 5", ESP32-S3)
 rem           epd400 (4.2" e-paper, S3)  epd792 (5.79" e-paper, S3)
 rem each display gets its own build folder and sdkconfig, so switching doesnt rebuild everything
 setlocal
@@ -28,8 +29,10 @@ if /i "%DISP%"=="epd792"  (set NUM=6& set TARGET=esp32s3)
 if /i "%DISP%"=="es3c28p" (set NUM=7& set TARGET=esp32s3)
 if /i "%DISP%"=="nmcydc5" (set NUM=8& set TARGET=esp32c5)
 if /i "%DISP%"=="crowadv28" (set NUM=9& set TARGET=esp32s3)
+if /i "%DISP%"=="crowadv50" (set NUM=10& set TARGET=esp32s3)
+if /i "%DISP%"=="jc8048w550" (set NUM=11& set TARGET=esp32s3)
 if "%NUM%"=="" (
-  echo unknown display %DISP%, pick one of: ili9341 st7796 ili9486 gc9a01 es3c28p nmcydc5 crowadv28 epd400 epd792
+  echo unknown display %DISP%, pick one of: ili9341 st7796 ili9486 gc9a01 es3c28p nmcydc5 crowadv28 crowadv50 jc8048w550 epd400 epd792
   exit /b 1
 )
 rem the CYD keeps the plain build folder and sdkconfig it always had

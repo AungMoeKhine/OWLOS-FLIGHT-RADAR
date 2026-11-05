@@ -47,6 +47,11 @@ The map under them comes from OpenStreetMap.
 - **2.8" Elecrow CrowPanel Advance** (the 2.8" HMI ESP32 AI display): ESP32-S3, ST7789 320x240 IPS,
   capacitive touch (FT6336), two USB-C ports (either works). New, not run on one here yet: the pins
   come from Elecrow's examples and schematic.
+- **5" Elecrow CrowPanel Advance** (the 5.0" HMI ESP32 AI display, V1.0 to V1.3): ESP32-S3, 800x480 IPS
+  on the RGB bus, capacitive touch (GT911). Experimental, never run on a real board here: the pins come
+  from Elecrow's examples.
+- **5" Guition JC8048W550**: ESP32-S3, 800x480 on the RGB bus, capacitive touch (GT911). Experimental,
+  never run on a real board here: the pins come from one board file so far.
 - **1.28" round** (Elecrow CrowPanel): ESP32-C3, GC9A01 240x240, capacitive touch.
 - **3.5" RPi LCD** (Waveshare RPi LCD (A) on the OWLOSAirQuality board): ESP32, ILI9486 480x320, no touch.
 
@@ -233,7 +238,8 @@ The pictures are the 3.5" board, the 2.8" one has the same screens a little smal
   Wrong colours or a mirrored picture: press **BOOT** in the first seconds after power on. It goes v2,
   v1 (micro USB), v3 (ST7789) and keeps the one you stop at.
 - The ES3C28P has the same three and starts as v2 too. The NM-CYD-C5 has two: RGB first, then BGR, for
-  red and blue swapped. The CrowPanel Advance has the same two, BGR first.
+  red and blue swapped. The CrowPanel Advance has the same two, BGR first. The 5" boards have them too,
+  RGB first.
 
 ### The round glass
 
@@ -263,7 +269,8 @@ and a PC preview.
 
 - `firmware/BUILD.BAT <screen> [COMx]` builds one screen's firmware (and flashes it to COMx). Screens:
   `ili9341` (2.8" CYD, the default), `st7796` (3.5" CYD), `gc9a01` (round), `ili9486` (RPi LCD),
-  `es3c28p`, `nmcydc5`, `crowadv28`. Each screen has its own build folder and sdkconfig.
+  `es3c28p`, `nmcydc5`, `crowadv28`, `crowadv50`, `jc8048w550`. Each screen has its own build folder and
+  sdkconfig.
 - `.github/workflows/pages.yml` builds them all in Espressif's ESP-IDF image and publishes the site
   with them on GitHub Pages, on every push to main.
 - The version is the first `## ` line of `CHANGES.md`: the firmware is built with it, and the site
@@ -311,8 +318,8 @@ The site talks to the board over the USB cable at 115200 baud, a line each way. 
   (1, 2, 5 or 10 of the distance unit), `led_level` (0 low, 1 mid,
   2 high), `led_hold` (0 till touched, 1 10 s, 2 while it lasts), `led_red` (4 or 22, the red one's GPIO),
   `led_test` (1: red, green, blue once),
-  `screen` (0 v1, 1 v2, 2 v3; on the NM-CYD-C5 and the CrowPanel Advance 0 RGB, 1 BGR). What is left
-  out stays as it is. Answered with `OWLOS OK` or `OWLOS ERR <why>`.
+  `screen` (0 v1, 1 v2, 2 v3; on the NM-CYD-C5, the CrowPanel Advance and the 5" boards 0 RGB, 1 BGR).
+  What is left out stays as it is. Answered with `OWLOS OK` or `OWLOS ERR <why>`.
 
 ## Data and licences
 

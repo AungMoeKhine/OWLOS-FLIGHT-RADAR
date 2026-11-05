@@ -98,35 +98,36 @@ void silhouette(canvas_t *cv, int kind, float x, float y, float heading, float s
  * it comes from that line's sine and cosine */
 
 static uint8_t *s_phi8;                  /* angle from straight up, 1/256 of 90 degrees, dx <= dy only */
-static uint16_t s_tri[RQ];               /* where row dy starts in it */
-static uint8_t  s_ring[RQ * 16], s_dash[RQ * 16], s_glass[RQ + 1];
+static uint16_t s_tri[G_RQ];             /* where row dy starts in it */
+static uint8_t  s_ring[G_RQ * 16], s_dash[G_RQ * 16], s_glass[G_RQ + 1];
 
 static float cover(float r, float R, float w) { return clampf(w * 0.5f + 0.5f - fabsf(r - R), 0, 1); }
 
 int scope_init(void)
 {
-    if (!s_phi8) s_phi8 = malloc(RQ * (RQ + 1) / 2);
+    if (!s_phi8) s_phi8 = malloc(G_RQ * (G_RQ + 1) / 2);
     if (!s_phi8) return 0;
     int at = 0;
-    for (int dy = 0; dy < RQ; dy++) {
+    for (int dy = 0; dy < G_RQ; dy++) {
         s_tri[dy] = (uint16_t)at;
         for (int dx = 0; dx <= dy; dx++) {
             float a = atan2f((float)dx, (float)dy) / (0.5f * 3.14159265f) * 256.0f;
             s_phi8[at++] = (uint8_t)(a + 0.5f > 255.0f ? 255.0f : a + 0.5f);
         }
     }
-    for (int i = 0; i < RQ * 16; i++) {
+    for (int i = 0; i < G_RQ * 16; i++) {
         float r = (float)i / 16.0f, a = 0, d = 0;
-        a += 150.0f * cover(r, (float)PR, 1.0f);                    // the range ring
-        a += 230.0f * cover(r, (float)SR, 1.3f);                    // the rim
-        if (r > SR) { float h = clampf(1.0f - (r - SR) / 5.0f, 0, 1); a += 30.0f * h * h; }        // glow outside it
-        if (r < PR && r > PR - 10) { float h = (r - (PR - 10)) / 10.0f; a += 22.0f * h * h; }    // and inside the ring
-        for (int k = 1; k <= 3; k++) d += 95.0f * cover(r, PR * (float)k / 4.0f, 1.0f);      // the inner rings, dashed
+        const float in = GFX_PL(10.0f);
+        a += 150.0f * cover(r, (float)G_PR, GFX_PL(1.0f));          // the range ring
+        a += 230.0f * cover(r, (float)G_SR, GFX_PL(1.3f));          // the rim
+        if (r > G_SR) { float h = clampf(1.0f - (r - G_SR) / GFX_PL(5.0f), 0, 1); a += 30.0f * h * h; }   // glow outside it
+        if (r < G_PR && r > G_PR - in) { float h = (r - (G_PR - in)) / in; a += 22.0f * h * h; }         // and inside the ring
+        for (int k = 1; k <= 3; k++) d += 95.0f * cover(r, G_PR * (float)k / 4.0f, GFX_PL(1.0f));         // the inner rings, dashed
         s_ring[i] = (uint8_t)clampf(a, 0, 255);
         s_dash[i] = (uint8_t)clampf(d, 0, 255);
     }
-    for (int r = 0; r <= RQ; r++) {
-        float t = clampf((float)r / PR, 0, 1);
+    for (int r = 0; r <= G_RQ; r++) {
+        float t = clampf((float)r / G_PR, 0, 1);
         s_glass[r] = (uint8_t)(70.0f + 100.0f * t * t * t);         // dark in the middle, lighter to the ring
     }
     return 1;
@@ -160,6 +161,7 @@ static inline int32_t off_line(int dx, int dy, int k)
  * look paints OpenStreetMap's own --- */
 
 static float k_px(const ui_t *u);
+static float k_glass(const ui_t *u) { return GFX_PL(k_px(u)); }   // pixels of the glass a km
 
 // the map, when there is one for this home and the user wants it
 static const map_t *ground(const ui_t *u)
@@ -203,7 +205,7 @@ static void ground_paint(const ui_t *u, uint32_t *col, uint8_t *lev)
  * registers and is slower by a sixth even with no map in it */
 static ALWAYS_INLINE void disc_pass(ui_t *u, canvas_t *cv, const int radar, const int classic, const map_t *m)
 {
-    int ya = SCY - RQ + 1, yb = SCY + RQ - 1;
+    int ya = G_SCY - G_RQ + 1, yb = G_SCY + G_RQ - 1;
     if (ya < cv->y0) ya = cv->y0;
     if (yb > cv->y0 + cv->h - 1) yb = cv->y0 + cv->h - 1;
     if (ya > yb) return;
@@ -214,7 +216,7 @@ static ALWAYS_INLINE void disc_pass(ui_t *u, canvas_t *cv, const int radar, cons
     float    gk = 0, gcu = 1, gsu = 0;
     int32_t  gdu = 0, gdv = 0, gmu = 0, gmv = 0;
     if (m) {
-        gk = m->kpx / k_px(u);
+        gk = m->kpx / k_glass(u);
         gcu = cosf(u->cfg.up * D2R);
         gsu = sinf(u->cfg.up * D2R);
         gdu = (int32_t)lroundf(gcu * gk * 65536.0f);
@@ -232,7 +234,7 @@ static ALWAYS_INLINE void disc_pass(ui_t *u, canvas_t *cv, const int radar, cons
     const uint16_t beam = (uint16_t)(u->beam / 360.0f * 65536.0f);
     const uint16_t up16 = (uint16_t)((uint32_t)u->cfg.up * 65536u / 360u);
     const uint16_t trail = 16384;                                  /* 90 degrees of afterglow */
-    const uint32_t RP16 = PR * 16, RQ16 = RQ * 16, RIM16 = SR * 16 + 4;
+    const uint32_t RP16 = G_PR * 16, RQ16 = G_RQ * 16, RIM16 = G_SR * 16 + 4;
     const uint32_t glass = C_GLASS, prim = C_PRIM, focus = C_FOCUS;
     const int32_t bc = (int32_t)lroundf(cosf(u->beam * D2R) * 16384.0f), bs = (int32_t)lroundf(sinf(u->beam * D2R) * 16384.0f);
     uint8_t trail_lut[257];                                        // by distance behind the beam: no divide a pixel
@@ -243,21 +245,21 @@ static ALWAYS_INLINE void disc_pass(ui_t *u, canvas_t *cv, const int radar, cons
     const uint32_t trail_k = (256u << 16) / trail;
     /* the ground of a row is looked up first, in a loop of its own: the pixel loop below has
      * all the registers it can use already */
-    uint8_t ground_row[2 * RQ + 2];
+    uint8_t ground_row[2 * G_RQ + 2];
     memset(ground_row, M_NONE, sizeof ground_row);
 
     for (int y = ya; y <= yb; y++) {
-        int dy = y - SCY, ady = dy < 0 ? -dy : dy;
-        if (ady >= RQ) continue;
+        int dy = y - G_SCY, ady = dy < 0 ? -dy : dy;
+        if (ady >= G_RQ) continue;
         uint32_t *row = gfx_row(cv, y);
         const uint8_t *lp = s_phi8 + s_tri[ady];
-        int span = (int)sqrtf((float)((RQ - 1) * (RQ - 1) - ady * ady));
-        int xa = SCX - span < 0 ? 0 : SCX - span;
-        int xb = SCX + span > GFX_W - 1 ? GFX_W - 1 : SCX + span;
+        int span = (int)sqrtf((float)((G_RQ - 1) * (G_RQ - 1) - ady * ady));
+        int xa = G_SCX - span < 0 ? 0 : G_SCX - span;
+        int xb = G_SCX + span > GFX_PW - 1 ? GFX_PW - 1 : G_SCX + span;
         /* a pixel's radius (1/16 px) and angle hang on |dx| only: worked out once a row for both
          * halves of it, not once a pixel. a radius past the disc is RQ16 */
-        uint16_t rad[RQ + 1], phi[RQ + 1];
-        const int amax = SCX - xa > xb - SCX ? SCX - xa : xb - SCX;
+        uint16_t rad[G_RQ + 1], phi[G_RQ + 1];
+        const int amax = G_SCX - xa > xb - G_SCX ? G_SCX - xa : xb - G_SCX;
 #if GFX_SOFT_FLOAT
         int32_t r2 = dy * dy;                                      // the radius squared, whole px
         uint32_t r16 = gfx_isqrt((uint32_t)r2 << 8);
@@ -277,9 +279,9 @@ static ALWAYS_INLINE void disc_pass(ui_t *u, canvas_t *cv, const int radar, cons
             phi[a] = (uint16_t)(a <= ady ? lp[a] : 256u - s_phi8[s_tri[a] + ady]);
         }
         const uint8_t *cl = ground_row - xa;                       // the ground under pixel x: cl[x]
-        if (m && ady < PR) {
-            int gs = (int)sqrtf((float)(PR * PR - ady * ady)), ga = SCX - gs, gb = SCX + gs;   // the range ring's chord
-            float right = (float)(ga - SCX), up = (float)-dy;     // to_screen backwards: east and north
+        if (m && ady < G_PR) {
+            int gs = (int)sqrtf((float)(G_PR * G_PR - ady * ady)), ga = G_SCX - gs, gb = G_SCX + gs;   // the range ring's chord
+            float right = (float)(ga - G_SCX), up = (float)-dy;   // to_screen backwards: east and north
             int32_t gu = gmu + (int32_t)lroundf((right * gcu + up * gsu) * gk * 65536.0f);
             int32_t gv = gmv - (int32_t)lroundf((up * gcu - right * gsu) * gk * 65536.0f);
             const uint32_t mw = (uint32_t)m->w, mh = (uint32_t)m->h;
@@ -294,7 +296,7 @@ static ALWAYS_INLINE void disc_pass(ui_t *u, canvas_t *cv, const int radar, cons
             memset(ground_row, M_NONE, sizeof ground_row);
         }
         for (int x = xa; x <= xb; x++) {
-            int dx = x - SCX, adx = dx < 0 ? -dx : dx;
+            int dx = x - G_SCX, adx = dx < 0 ? -dx : dx;
             const uint32_t r16 = rad[adx];
             if (r16 >= RQ16) continue;
             unsigned ph = phi[adx], q = ph << 6;                   /* a quarter turn = 16384 */
@@ -311,14 +313,16 @@ static ALWAYS_INLINE void disc_pass(ui_t *u, canvas_t *cv, const int radar, cons
             }
             unsigned st = s_ring[r16];
             if (radar && (ph >> 3) & 1) st += s_dash[r16];
-            if (r16 >= (SR - 6) * 16 && r16 <= RIM16) {            // the ticks, in from the rim
+            if (r16 >= (G_SR - GFX_Z(6)) * 16 && r16 <= RIM16) {   // the ticks, in from the rim
                 int k = (int)(((uint32_t)brg * 72u + 32768u) >> 16) % 72;
-                int len = k % 6 == 0 ? 6 : k % 2 == 0 ? 4 : 2;
-                int32_t cov = 192 - off_line(dx, dy, k);
-                if (cov > 0 && r16 >= (uint32_t)(SR - len) * 16) st += (unsigned)((k % 6 == 0 ? 240 : k % 2 == 0 ? 150 : 90) * cov >> 8);
-            } else if (radar && r16 >= 7 * 16 && r16 < RP16 - 16) {   // the cross along the compass, the diagonals fainter
+                int len = k % 6 == 0 ? GFX_Z(6) : k % 2 == 0 ? GFX_Z(4) : GFX_Z(2);
+                int32_t cov = GFX_Z(192) - off_line(dx, dy, k);
+                if (GFX_SCALED && cov > 255) cov = 255;
+                if (cov > 0 && r16 >= (uint32_t)(G_SR - len) * 16) st += (unsigned)((k % 6 == 0 ? 240 : k % 2 == 0 ? 150 : 90) * cov >> 8);
+            } else if (radar && r16 >= GFX_Z(7) * 16 && r16 < RP16 - 16) {   // the cross along the compass, the diagonals fainter
                 int k8 = (int)(((uint32_t)brg * 8u + 32768u) >> 16) & 7;
-                int32_t cov = 256 - off_line(dx, dy, k8 * 9);
+                int32_t cov = GFX_Z(256) - off_line(dx, dy, k8 * 9);
+                if (GFX_SCALED && cov > 256) cov = 256;
                 if (cov > 0) st += (unsigned)((k8 & 1 ? 20 : 36) * cov >> 8);
             }
             if (st) p = gfx_add(p, gfx_scale(prim, st > 255 ? 255 : st));
@@ -334,7 +338,8 @@ static ALWAYS_INLINE void disc_pass(ui_t *u, canvas_t *cv, const int radar, cons
                 }
                 int16_t e = (int16_t)(uint16_t)(ang - beam);        /* near the beam's edge: how near, exactly */
                 if (e > -1200 && e < 1200 && r16 > 32) {
-                    int32_t off = (dx * bc + dy * bs) >> 6, cov = 333 - (off < 0 ? -off : off);
+                    int32_t off = (dx * bc + dy * bs) >> 6, cov = GFX_Z(333) - (off < 0 ? -off : off);
+                    if (GFX_SCALED && cov > 333) cov = 333;
                     if (cov > 0) p = gfx_add(p, gfx_scale(focus, (uint32_t)(190 * cov >> 8)));
                 }
             }
@@ -726,7 +731,7 @@ static void compass(ui_t *u, canvas_t *cv)
         if (d % 90 == 0) {                             // the smooth font: the pixel one doubled reads N as an arch
             const char *L = d == 0 ? "N" : d == 90 ? "E" : d == 180 ? "S" : "W";
             const font_t *f = d == 0 ? &FONT_MEDIUM : &FONT_SMALL;
-            font_text(cv, f, lx - font_width(f, L) / 2, ly - f->ascent + (d == 0 ? 5 : 4), L, d == 0 ? C_FOCUS : C_PRIM, 255);
+            font_text(cv, f, lx - font_width(f, L) / 2, ly - FONT_ASCENT(f) + (d == 0 ? 5 : 4), L, d == 0 ? C_FOCUS : C_PRIM, 255);
         } else if (u->cfg.look == LOOK_RADAR) {        // the maps have their grid instead
             snprintf(buf, sizeof buf, "%d", d);
             micro_text(cv, lx - micro_width(buf, 1) / 2, ly - 2, buf, C_PRIM, 200, 1);
@@ -955,7 +960,7 @@ static int sq_free(const ui_t *u, int x, int y, int w, int h)   // a box on the 
 static void sq_ground(ui_t *u, canvas_t *cv)
 {
     const map_t *m = ground(u);
-    const int classic = u->cfg.look == LOOK_CLASSIC, cx = view_cx(u);
+    const int classic = u->cfg.look == LOOK_CLASSIC, cx = GFX_Z(view_cx(u));
     const uint32_t base = classic ? RGB(236, 233, 226) : gfx_mix(C_BG0, C_GLASS, 150);   // where no map is (yet)
     uint32_t lut[16], col[M_CLASSES];
     uint8_t lev[M_CLASSES];
@@ -964,20 +969,20 @@ static void sq_ground(ui_t *u, canvas_t *cv)
     if (m) {
         ground_paint(u, col, lev);
         for (int i = 0; i < M_CLASSES; i++) lut[i] = classic ? col[i] : gfx_add(base, gfx_scale(col[i], lev[i]));
-        s = m->kpx / k_px(u);                          // texels a pixel: 1 unless a finger is zooming
+        s = m->kpx / k_glass(u);                       // texels a pixel: 1 unless a finger is zooming
     }
     const int32_t du = (int32_t)lroundf(s * 65536.0f);
     for (int y = cv->y0; y < cv->y0 + cv->h; y++) {
         uint32_t *row = gfx_row(cv, y);
-        int iv = m ? (int)floorf((y - SCY + 0.5f) * s + m->h * 0.5f) : -1;
+        int iv = m ? (int)floorf((y - G_SCY + 0.5f) * s + m->h * 0.5f) : -1;
         if (iv < 0 || iv >= (m ? m->h : 0)) {
-            for (int x = 0; x < GFX_W; x++) row[x] = base;
+            for (int x = 0; x < GFX_PW; x++) row[x] = base;
             continue;
         }
         const uint32_t *tr = m->row[iv];
         const uint32_t mw = (uint32_t)m->w;
         int32_t gu = (int32_t)lroundf(((0.5f - cx) * s + m->w * 0.5f) * 65536.0f);
-        for (int x = 0; x < GFX_W; x++, gu += du) {
+        for (int x = 0; x < GFX_PW; x++, gu += du) {
             uint32_t iu = (uint32_t)(gu >> 16);
             row[x] = lut[iu < mw ? (tr[iu >> 3] >> ((iu & 7) * 4)) & 15 : M_NONE];
         }
@@ -1152,7 +1157,7 @@ static void grid_draw(ui_t *u, canvas_t *cv)
         } else if (gfx_touches(cv, g->ya, g->yb)) {
             for (int k = 0; k < g->n; k++) gfx_line(cv, g->p[k].ax, g->p[k].ay, g->p[k].bx, g->p[k].by, 1.0f, ink, ia);
         }
-        if (!g->lw || !gfx_touches(cv, g->ly, g->ly + 11 + FONT_SMALL.line_h)) continue;
+        if (!g->lw || !gfx_touches(cv, g->ly, g->ly + 11 + FONT_LINE_H(&FONT_SMALL))) continue;
 #if RADAR_ROUND
         gfx_fill(cv, g->lx, g->ly, g->lw, 11, classic ? RGB(242, 239, 233) : C_BG0, classic ? 190 : 150);
         font_text(cv, &FONT_SMALL, g->lx + 2, g->ly, g->t, classic ? RGB(50, 55, 70) : C_DIM, 240);

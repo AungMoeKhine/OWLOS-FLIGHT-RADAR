@@ -21,8 +21,8 @@ static inline void plot(uint32_t *row, int x, uint32_t c, int a)
 
 CORE_HOT void gfx_fill(canvas_t *cv, int x, int y, int w, int h, uint32_t c, int a)
 {
-    int x0 = imax(x, 0), x1 = imin(x + w, GFX_W) - 1;
-    int ya = y, yb = y + h - 1;
+    int x0 = imax(GFX_Z(x), 0), x1 = imin(GFX_Z(x + w), GFX_PW) - 1;
+    int ya = GFX_Z(y), yb = GFX_Z(y + h) - 1;
     if (x0 > x1 || !clip_rows(cv, &ya, &yb)) return;
     for (int yy = ya; yy <= yb; yy++) {
         uint32_t *row = gfx_row(cv, yy);
@@ -30,6 +30,38 @@ CORE_HOT void gfx_fill(canvas_t *cv, int x, int y, int w, int h, uint32_t c, int
     }
 }
 
+#if GFX_SCALED
+/* a line a layout pixel wide is a pixel and a half on the glass: one row full, the one beside it
+ * half, the half on the side the layout pixel really covers. two lines side by side then meet */
+static void hspan(canvas_t *cv, int x0, int x1, int y, uint32_t c, int a)
+{
+    uint32_t *row = gfx_row(cv, y);
+    if (!row) return;
+    for (int x = imax(x0, 0); x <= imin(x1, GFX_PW - 1); x++) plot(row, x, c, a);
+}
+
+static void vspan(canvas_t *cv, int x, int y0, int y1, uint32_t c, int a)
+{
+    if (x < 0 || x >= GFX_PW || !clip_rows(cv, &y0, &y1)) return;
+    for (int y = y0; y <= y1; y++) plot(gfx_row(cv, y), x, c, a);
+}
+
+CORE_HOT void gfx_hline(canvas_t *cv, int x0, int x1, int y, uint32_t c, int a)
+{
+    if (x0 > x1) { int t = x0; x0 = x1; x1 = t; }
+    const int xa = GFX_Z(x0), xb = GFX_Z(x1 + 1) - 1, r = GFX_Z(y);
+    hspan(cv, xa, xb, r, c, y & 1 ? a / 2 : a);
+    hspan(cv, xa, xb, r + 1, c, y & 1 ? a : a / 2);
+}
+
+CORE_HOT void gfx_vline(canvas_t *cv, int x, int y0, int y1, uint32_t c, int a)
+{
+    if (y0 > y1) { int t = y0; y0 = y1; y1 = t; }
+    const int ya = GFX_Z(y0), yb = GFX_Z(y1 + 1) - 1, r = GFX_Z(x);
+    vspan(cv, r, ya, yb, c, x & 1 ? a / 2 : a);
+    vspan(cv, r + 1, ya, yb, c, x & 1 ? a : a / 2);
+}
+#else
 CORE_HOT void gfx_hline(canvas_t *cv, int x0, int x1, int y, uint32_t c, int a)
 {
     uint32_t *row = gfx_row(cv, y);
@@ -46,17 +78,18 @@ CORE_HOT void gfx_vline(canvas_t *cv, int x, int y0, int y1, uint32_t c, int a)
     if (!clip_rows(cv, &y0, &y1)) return;
     for (int y = y0; y <= y1; y++) plot(gfx_row(cv, y), x, c, a);
 }
+#endif
 
 // diagonal stripes, the "caution tape" bars like on the reference HUDs
 CORE_HOT void gfx_hatch(canvas_t *cv, int x, int y, int w, int h, uint32_t c, int a)
 {
-    int x0 = imax(x, 0), x1 = imin(x + w, GFX_W) - 1;
-    int ya = y, yb = y + h - 1;
+    int x0 = imax(GFX_Z(x), 0), x1 = imin(GFX_Z(x + w), GFX_PW) - 1;
+    int ya = GFX_Z(y), yb = GFX_Z(y + h) - 1;
     if (x0 > x1 || !clip_rows(cv, &ya, &yb)) return;
     for (int yy = ya; yy <= yb; yy++) {
         uint32_t *row = gfx_row(cv, yy);
         for (int xx = x0; xx <= x1; xx++)
-            if (((xx + yy) & 3) < 2) plot(row, xx, c, a);
+            if (GFX_SCALED ? (xx + yy) % 6 < 3 : ((xx + yy) & 3) < 2) plot(row, xx, c, a);
     }
 }
 
@@ -82,6 +115,7 @@ uint32_t gfx_isqrt(uint32_t v)
  * bounding box */
 CORE_HOT void gfx_line(canvas_t *cv, float x0, float y0, float x1, float y1, float w, uint32_t c, int a)
 {
+    x0 = GFX_PX(x0); y0 = GFX_PX(y0); x1 = GFX_PX(x1); y1 = GFX_PX(y1); w = GFX_PL(w);
     float hw = w * 0.5f;
     if (w < 1.0f) { a = (int)(a * w); hw = 0.5f; }   // thinner than 1px: draw 1px but fainter
     if (a <= 0) return;
@@ -107,7 +141,7 @@ CORE_HOT void gfx_line(canvas_t *cv, float x0, float y0, float x1, float y1, flo
             sa = fmaxf(minx, xc - half);
             sb = fminf(maxx, xc + half);
         }
-        int xa = imax((int)floorf(sa), 0), xb = imin((int)ceilf(sb), GFX_W - 1);
+        int xa = imax((int)floorf(sa), 0), xb = imin((int)ceilf(sb), GFX_PW - 1);
         uint32_t *row = gfx_row(cv, y);
         int32_t al = a_x * xa + a_y * y + a_0, ac = p_x * xa + p_y * y + p_0;
         for (int x = xa; x <= xb; x++, al += a_x, ac += p_x) {
@@ -129,6 +163,7 @@ CORE_HOT void gfx_line(canvas_t *cv, float x0, float y0, float x1, float y1, flo
 // a soft dot at a sub-pixel spot, shared out over the 2x2 pixels round it: a trail's point
 CORE_HOT void gfx_dot(canvas_t *cv, float x, float y, uint32_t c, int a)
 {
+    x = GFX_PX(x); y = GFX_PX(y);
     int fx = (int)lroundf(x * 16.0f) - 8, fy = (int)lroundf(y * 16.0f) - 8;   // the dot's centre is a pixel's centre
     int ix = fx >> 4, iy = fy >> 4, wx = fx & 15, wy = fy & 15;
     for (int j = 0; j < 2; j++) {
@@ -137,7 +172,7 @@ CORE_HOT void gfx_dot(canvas_t *cv, float x, float y, uint32_t c, int a)
         int ay = j ? wy : 16 - wy;
         for (int i = 0; i < 2; i++) {
             int px = ix + i;
-            if (px < 0 || px >= GFX_W) continue;
+            if (px < 0 || px >= GFX_PW) continue;
             int k = a * ay * (i ? wx : 16 - wx) >> 8;
             if (k > 0) plot(row, px, c, k);
         }
@@ -146,6 +181,7 @@ CORE_HOT void gfx_dot(canvas_t *cv, float x, float y, uint32_t c, int a)
 
 CORE_HOT void gfx_ring(canvas_t *cv, float cx, float cy, float r, float w, uint32_t c, int a)
 {
+    cx = GFX_PX(cx); cy = GFX_PX(cy); r = GFX_PL(r); w = GFX_PL(w);
     float hw = w * 0.5f;
     if (w < 1.0f) { a = (int)(a * w); hw = 0.5f; }
     float ro = r + hw + 1.0f, ri = r - hw - 1.0f;
@@ -156,7 +192,7 @@ CORE_HOT void gfx_ring(canvas_t *cv, float cx, float cy, float r, float w, uint3
         if (fabsf(dy) > ro) continue;
         float xo = gfx_sqrt(ro * ro - dy * dy);
         float xi = (ri > 0.0f && fabsf(dy) < ri) ? gfx_sqrt(ri * ri - dy * dy) : -1.0f;
-        int xa = imax((int)floorf(cx - xo), 0), xb = imin((int)ceilf(cx + xo), GFX_W - 1);
+        int xa = imax((int)floorf(cx - xo), 0), xb = imin((int)ceilf(cx + xo), GFX_PW - 1);
         uint32_t *row = gfx_row(cv, y);
         for (int x = xa; x <= xb; x++) {
             float dx = (float)x - cx;
@@ -175,12 +211,13 @@ CORE_HOT void gfx_ring(canvas_t *cv, float cx, float cy, float r, float w, uint3
 
 CORE_HOT void gfx_disc(canvas_t *cv, float cx, float cy, float r, uint32_t c, int a)
 {
+    cx = GFX_PX(cx); cy = GFX_PX(cy); r = GFX_PL(r);
     float ro = r + 1.0f;
     int ya = (int)floorf(cy - ro), yb = (int)ceilf(cy + ro);
     if (!clip_rows(cv, &ya, &yb)) return;
     for (int y = ya; y <= yb; y++) {
         float dy = (float)y - cy;
-        int xa = imax((int)floorf(cx - ro), 0), xb = imin((int)ceilf(cx + ro), GFX_W - 1);
+        int xa = imax((int)floorf(cx - ro), 0), xb = imin((int)ceilf(cx + ro), GFX_PW - 1);
         uint32_t *row = gfx_row(cv, y);
         for (int x = xa; x <= xb; x++) {
             float dx = (float)x - cx;
@@ -195,13 +232,14 @@ CORE_HOT void gfx_disc(canvas_t *cv, float cx, float cy, float r, uint32_t c, in
 // soft additive glow, (1 - d^2/r^2)^2 so no sqrt needed. in 1/16 px, whole numbers
 CORE_HOT void gfx_glow(canvas_t *cv, float cx, float cy, float r, uint32_t c, int a)
 {
+    cx = GFX_PX(cx); cy = GFX_PX(cy); r = GFX_PL(r);
     if (a <= 0 || r <= 0.5f) return;
     int ya = (int)floorf(cy - r), yb = (int)ceilf(cy + r);
     if (!clip_rows(cv, &ya, &yb)) return;
     const int32_t cx16 = (int32_t)lroundf(cx * 16.0f), cy16 = (int32_t)lroundf(cy * 16.0f);
     const int32_t r16 = (int32_t)lroundf(r * 16.0f), r2 = r16 * r16;
     const int32_t inv = (256 << 16) / r2;              // d2 * inv >> 16 = 256 d2 / r2
-    int xa = imax((int)floorf(cx - r), 0), xb = imin((int)ceilf(cx + r), GFX_W - 1);
+    int xa = imax((int)floorf(cx - r), 0), xb = imin((int)ceilf(cx + r), GFX_PW - 1);
     for (int y = ya; y <= yb; y++) {
         int32_t dy = y * 16 - cy16, dy2 = dy * dy;
         if (dy2 >= r2) continue;
@@ -220,6 +258,11 @@ CORE_HOT void gfx_glow(canvas_t *cv, float cx, float cy, float r, uint32_t c, in
  * edges are set up once in floats, then each is a value in 1/256 px that steps by an add a pixel */
 CORE_HOT static void convex(canvas_t *cv, const float *xy, int n, uint32_t c, int a)
 {
+#if GFX_SCALED
+    float glass[24];
+    for (int i = 0; i < 2 * n; i++) glass[i] = GFX_PX(xy[i]);
+    xy = glass;
+#endif
     float area = 0;
     for (int i = 0; i < n; i++) {
         int j = (i + 1) % n;
@@ -242,7 +285,7 @@ CORE_HOT static void convex(canvas_t *cv, const float *xy, int n, uint32_t c, in
     }
     int ya = (int)floorf(miny) - 1, yb = (int)ceilf(maxy) + 1;
     if (!clip_rows(cv, &ya, &yb)) return;
-    int xa = imax((int)floorf(minx) - 1, 0), xb = imin((int)ceilf(maxx) + 1, GFX_W - 1);
+    int xa = imax((int)floorf(minx) - 1, 0), xb = imin((int)ceilf(maxx) + 1, GFX_PW - 1);
     for (int y = ya; y <= yb; y++) {
         uint32_t *row = gfx_row(cv, y);
         /* where on this row every edge leaves some coverage: edge i needs ex*x + c > -FX/2. a turned
@@ -296,8 +339,8 @@ void gfx_arc(canvas_t *cv, float cx, float cy, float r, float deg0, float deg1, 
     }
 }
 
-/* 4x4 ordered (bayer) dither 888 -> 565, then byte swap to big endian
- * so DMA can send the buffer as is */
+/* 4x4 ordered (bayer) dither 888 -> 565, then byte swap to big endian so DMA can send the buffer
+ * as is. the RGB bus reads a frame in the chip's own order: no swap */
 CORE_HOT void gfx_pack565(const canvas_t *cv, uint16_t *out)
 {
     /* NOTE: tried three lookup tables instead of this math, it was slower on the
@@ -306,10 +349,10 @@ CORE_HOT void gfx_pack565(const canvas_t *cv, uint16_t *out)
         { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 }
     };
     for (int r = 0; r < cv->h; r++) {
-        const uint32_t *row = cv->px + r * GFX_W;
+        const uint32_t *row = cv->px + r * GFX_PW;
         const uint8_t *bm = bayer[(cv->y0 + r) & 3];
-        uint16_t *o = out + r * GFX_W;
-        for (int x = 0; x < GFX_W; x++) {
+        uint16_t *o = out + r * GFX_PW;
+        for (int x = 0; x < GFX_PW; x++) {
             uint32_t p = row[x];
             unsigned d = bm[x & 3];
             unsigned rr = (((p >> 16) & 255) + (d >> 1)) >> 3;
@@ -319,7 +362,7 @@ CORE_HOT void gfx_pack565(const canvas_t *cv, uint16_t *out)
             if (gg > 63) gg = 63;
             if (bb > 31) bb = 31;
             uint16_t v = (uint16_t)((rr << 11) | (gg << 5) | bb);
-            o[x] = (uint16_t)((v >> 8) | (v << 8));
+            o[x] = RADAR_RGB_BUS ? v : (uint16_t)((v >> 8) | (v << 8));
         }
     }
 }

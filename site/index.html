@@ -246,6 +246,36 @@
       </div>
     </article>
     <article class="card">
+      <img src="shots/crowadv50/02-live.png" alt="the radar on a 5 inch board" loading="lazy">
+      <div class="body">
+        <h3>5" CrowPanel Advance</h3>
+        <div class="spec">Elecrow's 5.0" HMI, V1.0 to V1.3, ESP32-S3, 800x480 IPS, capacitive touch. Experimental:
+          built from the maker's files, never run on a real board here. The screen may stay dark or shake. Tell
+          us how it goes in <a href="https://www.facebook.com/groups/OWLOS">our group</a>.</div>
+        <a class="boot-tag" href="#boot">RED AND BLUE SWAPPED? PRESS BOOT</a>
+        <esp-web-install-button class="flash" manifest="fw/crowadv50/manifest.json">
+          <button slot="activate">CONNECT &amp; FLASH</button>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
+          <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
+        </esp-web-install-button>
+      </div>
+    </article>
+    <article class="card">
+      <img src="shots/crowadv50/02-live.png" alt="the radar on a 5 inch board" loading="lazy">
+      <div class="body">
+        <h3>5" Guition JC8048W550</h3>
+        <div class="spec">ESP32-S3, 800x480, capacitive touch. Experimental: built from a board file, never run on a
+          real board here. The screen may stay dark or shake. Tell us how it goes in
+          <a href="https://www.facebook.com/groups/OWLOS">our group</a>.</div>
+        <a class="boot-tag" href="#boot">RED AND BLUE SWAPPED? PRESS BOOT</a>
+        <esp-web-install-button class="flash" manifest="fw/jc8048w550/manifest.json">
+          <button slot="activate">CONNECT &amp; FLASH</button>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
+          <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
+        </esp-web-install-button>
+      </div>
+    </article>
+    <article class="card">
       <img src="shots/st7796/02-live.png" alt="the radar on the 3.5 inch board" loading="lazy">
       <div class="body">
         <h3>3.5" CYD</h3>
@@ -305,7 +335,8 @@
       </ol>
       <p>The <b>ES3C28P</b> has the same three to go through, it starts as v2 too. The <b>NM-CYD-C5</b> has two:
          <b>RGB</b> first, then <b>BGR</b>. The <b>CrowPanel Advance</b> has the same two the other way round,
-         <b>BGR</b> first. Press BOOT if red and blue look swapped.</p>
+         <b>BGR</b> first. The <b>5" boards</b> have them too, <b>RGB</b> first. Press BOOT if red and blue look
+         swapped.</p>
       <p>Missed the 8 seconds? Press RST and start again. Don't hold BOOT while you press RST: that wakes the
          flasher and the screen stays dark.</p>
     </div>

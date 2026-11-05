@@ -54,6 +54,12 @@ extern const theme_t *TH;
 #define RL       (SR - 12)    /* the compass letters and numbers, in the band between rim and ring */
 #define PR       (SR - 20)    /* the range ring: range_km lands here */
 #define RQ       (SR + 6)     /* the disc and its glow fit in this radius */
+/* the same on the glass (config.h), for what is drawn pixel by pixel there: the disc, the map */
+#define G_SR     GFX_Z(SR)
+#define G_PR     GFX_Z(PR)
+#define G_RQ     GFX_Z(RQ)
+#define G_SCX    GFX_Z(SCX)
+#define G_SCY    GFX_Z(SCY)
 #define TX       (PX + 6)
 #define TX2      (PX + PW - 5)
 #define BTN_Y    (GFX_H - 38)

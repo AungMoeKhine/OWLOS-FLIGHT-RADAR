@@ -46,10 +46,8 @@ static void lock_mark(canvas_t *cv, int x, int y, uint32_t c)
 
 void wifi_draw(ui_t *u, canvas_t *cv)
 {
-    int y1 = BAR_Y - 3;
-    int ya = cv->y0 > LIST_Y0 ? cv->y0 : LIST_Y0, yb = cv->y0 + cv->h - 1 < y1 ? cv->y0 + cv->h - 1 : y1;
-    if (ya <= yb) {
-        canvas_t lc = { cv->px + (ya - cv->y0) * GFX_W, ya, yb - ya + 1, cv->helper };
+    canvas_t lc;
+    if (gfx_sub(cv, LIST_Y0, BAR_Y - 3, &lc)) {
         for (int k = 0; k < u->net.n_aps; k++) {
             int y = net_y(u, k);
             if (!gfx_touches(&lc, y, y + NET_H)) continue;
@@ -59,7 +57,7 @@ void wifi_draw(ui_t *u, canvas_t *cv)
             if (pressed) gfx_fill(&lc, PG_L + 4, y, PG_R - PG_L - 8, NET_H - 2, C_PRIM, 70);
             gfx_hline(&lc, PG_L + 6, PG_R - 7, y + NET_H - 1, C_QUIET, 70);
             signal_bars(&lc, 12, y + (NET_H - 14) / 2, a->rssi, now ? C_FOCUS : C_PRIM);
-            const int tx = 40, ty = y + (NET_H - FONT_MEDIUM.line_h) / 2;
+            const int tx = 40, ty = y + (NET_H - FONT_LINE_H(&FONT_MEDIUM)) / 2;
             font_text_clip(&lc, &FONT_MEDIUM, tx, ty, a->ssid, now ? C_FOCUS : C_PRIM, 255, GFX_W - tx - 90);
             const char *tag = now ? (u->net.wifi ? "JOINED" : "SET") : a->open ? "OPEN" : NULL;
             int rx = GFX_W - 14;
@@ -203,7 +201,7 @@ static void field(ui_t *u, canvas_t *cv)
     chamfer_box(cv, x, y, w, h, C_BG0, 200, C_PRIM, 220);
     int cap;
     const char *text = typed(u, &cap);
-    const int n = (int)strlen(text), room = w - 20, ty = y + (h - FONT_MEDIUM.line_h) / 2;
+    const int n = (int)strlen(text), room = w - 20, ty = y + (h - FONT_LINE_H(&FONT_MEDIUM)) / 2;
     int px = x + 8;
     if (u->kb_show || u->kb_mode != KB_PASS) {
         const char *s = text;
@@ -250,7 +248,7 @@ void keys_draw(ui_t *u, canvas_t *cv)
             } else {
                 char one[2] = { (char)c, 0 };
                 button(cv, x, y + 2, w, KB_RH - 4, NULL, pressed ? 2 : 0);
-                font_text(cv, &FONT_MEDIUM, x + (w - font_width(&FONT_MEDIUM, one)) / 2, y + (KB_RH - FONT_MEDIUM.line_h) / 2,
+                font_text(cv, &FONT_MEDIUM, x + (w - font_width(&FONT_MEDIUM, one)) / 2, y + (KB_RH - FONT_LINE_H(&FONT_MEDIUM)) / 2,
                           one, pressed ? C_FOCUS : C_PRIM, 255);
             }
         }

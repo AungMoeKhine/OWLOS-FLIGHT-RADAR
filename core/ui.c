@@ -78,11 +78,11 @@ float range_km(const fr_cfg_t *c)
 void ui_ground_size(const fr_cfg_t *c, int *w, int *h, int *disc)
 {
     int square = !RADAR_ROUND && c->look != LOOK_RADAR;
-    *w = square ? GFX_W : 2 * PR;
-    *h = square ? GFX_H : 2 * PR;
+    *w = square ? GFX_PW : 2 * G_PR;                 // a texel a pixel of the glass
+    *h = square ? GFX_PH : 2 * G_PR;
     *disc = !square;
 }
-float ui_ground_kpx(const fr_cfg_t *c) { return (float)PR / range_km(c); }
+float ui_ground_kpx(const fr_cfg_t *c) { return (float)G_PR / range_km(c); }
 
 float range_snap(float v)
 {
@@ -187,12 +187,17 @@ void chamfer_box(canvas_t *cv, int x, int y, int w, int h, uint32_t fill, int fi
 void round_box(canvas_t *cv, int x, int y, int w, int h, int r, uint32_t c, int a)
 {
     if (!gfx_touches(cv, y, y + h - 1)) return;
+    w = GFX_Z(x + w) - GFX_Z(x);                       // from here on it is pixels of the glass
+    h = GFX_Z(y + h) - GFX_Z(y);
+    x = GFX_Z(x);
+    y = GFX_Z(y);
+    r = GFX_Z(r);
     const float x0 = (float)(x + r), x1 = (float)(x + w - r), y0 = (float)(y + r), y1 = (float)(y + h - r);   // the corners' middles
     for (int yy = y; yy < y + h; yy++) {
         uint32_t *row = gfx_row(cv, yy);
         if (!row) continue;
         float py = yy + 0.5f, dy = py < y0 ? y0 - py : py > y1 ? py - y1 : 0;
-        for (int xx = x < 0 ? 0 : x; xx < x + w && xx < GFX_W; xx++) {
+        for (int xx = x < 0 ? 0 : x; xx < x + w && xx < GFX_PW; xx++) {
             float px = xx + 0.5f, dx = px < x0 ? x0 - px : px > x1 ? px - x1 : 0;
             int k = a;
             if (dx > 0 && dy > 0) {                    // in a corner: how much of the pixel is inside its circle
@@ -246,7 +251,7 @@ void button_font(canvas_t *cv, int x, int y, int w, int h, const char *label, in
         micro_text(cv, x + (w - lw) / 2, y + (h - 5) / 2, label, c, 250, 1);
         return;
     }
-    font_text(cv, f, x + (w - lw) / 2, y + (h - f->line_h) / 2, label, c, 255);
+    font_text(cv, f, x + (w - lw) / 2, y + (h - FONT_LINE_H(f)) / 2, label, c, 255);
 }
 
 static int bar_w(int n) { return (BAR_R - BAR_L - 8 - (n - 1) * 4) / n; }
@@ -295,28 +300,30 @@ void page_header(canvas_t *cv, const char *title, const char *right, uint32_t co
 
 /* --- background: gradient, a faint grid, dust; rebuilt on theme change --- */
 
-static uint32_t s_bgrow[GFX_H];
-static uint16_t s_vigx[GFX_W], s_vigy[GFX_H];
-static int16_t  s_gridcols[GFX_W / 12 + 2];
+/* all of this is in pixels of the glass */
+#define BG_GRID GFX_Z(12)
+static uint32_t s_bgrow[GFX_PH];
+static uint16_t s_vigx[GFX_PW], s_vigy[GFX_PH];
+static int16_t  s_gridcols[GFX_PW / BG_GRID + 2];
 static int      s_ngrid;
 static struct { int16_t x, y; uint8_t a; } s_stars[128];
 static int      s_nstars, s_bg_theme = -1;
-#define VIG_W 56
+#define VIG_W GFX_Z(56)
 
 static void build_background(void)
 {
-    for (int y = 0; y < GFX_H; y++) {
-        float t = (float)y / (GFX_H - 1);
+    for (int y = 0; y < GFX_PH; y++) {
+        float t = (float)y / (GFX_PH - 1);
         s_bgrow[y] = gfx_mix(C_BG0, C_BG1, (uint32_t)(256.0f * (0.25f + 0.75f * t)));
-        float v = ((float)y - GFX_H / 2.0f) / (GFX_H * 7.0f / 12.0f);
+        float v = ((float)y - GFX_PH / 2.0f) / (GFX_PH * 7.0f / 12.0f);
         s_vigy[y] = (uint16_t)(256.0f * clampf(1.0f - 0.45f * v * v, 0.3f, 1.0f));
     }
     s_ngrid = 0;
-    for (int x = 0; x < GFX_W; x++) {
-        int e = x < GFX_W / 2 ? x : GFX_W - 1 - x;
+    for (int x = 0; x < GFX_PW; x++) {
+        int e = x < GFX_PW / 2 ? x : GFX_PW - 1 - x;
         float v = e < VIG_W ? 1.0f - (float)e / VIG_W : 0.0f;
         s_vigx[x] = (uint16_t)(256.0f * (1.0f - 0.4f * v * v));
-        if (((x - SCX + 1200) % 12) == 0) s_gridcols[s_ngrid++] = (int16_t)x;
+        if (((x - G_SCX + 100 * BG_GRID) % BG_GRID) == 0) s_gridcols[s_ngrid++] = (int16_t)x;
     }
     s_nstars = 0;
     for (int y = 0; y < GFX_H; y++)
@@ -324,8 +331,8 @@ static void build_background(void)
             uint32_t h = (uint32_t)x * 73856093u ^ (uint32_t)y * 19349663u;
             h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
             if ((h & 1023u) == 0) {
-                s_stars[s_nstars].x = (int16_t)x;
-                s_stars[s_nstars].y = (int16_t)y;
+                s_stars[s_nstars].x = (int16_t)(GFX_Z(x) < GFX_PW ? GFX_Z(x) : GFX_PW - 1);
+                s_stars[s_nstars].y = (int16_t)GFX_Z(y);
                 s_stars[s_nstars].a = (uint8_t)(30 + ((h >> 10) & 127));
                 s_nstars++;
             }
@@ -337,16 +344,16 @@ CORE_HOT void draw_background(canvas_t *cv, int grid_on)
     const uint32_t grid = gfx_scale(C_QUIET, 40), node = gfx_scale(C_QUIET, 90);
     for (int r = 0; r < cv->h; r++) {
         int y = cv->y0 + r;
-        uint32_t *row = cv->px + r * GFX_W;
+        uint32_t *row = cv->px + r * GFX_PW;
         uint32_t base = gfx_scale(s_bgrow[y], s_vigy[y]);
-        int lined = grid_on && ((y - SCY + 1200) % 12) == 0;
+        int lined = grid_on && ((y - G_SCY + 100 * BG_GRID) % BG_GRID) == 0;
         uint32_t fill = lined ? gfx_add(base, grid) : base;
         uint32_t col = gfx_add(base, lined ? node : grid);
-        for (int x = 0; x < GFX_W; x++) row[x] = fill;
+        for (int x = 0; x < GFX_PW; x++) row[x] = fill;
         if (grid_on) for (int i = 0; i < s_ngrid; i++) row[s_gridcols[i]] = col;
         for (int x = 0; x < VIG_W; x++) {
             row[x] = gfx_scale(row[x], s_vigx[x]);
-            row[GFX_W - 1 - x] = gfx_scale(row[GFX_W - 1 - x], s_vigx[GFX_W - 1 - x]);
+            row[GFX_PW - 1 - x] = gfx_scale(row[GFX_PW - 1 - x], s_vigx[GFX_PW - 1 - x]);
         }
     }
     for (int i = 0; i < s_nstars; i++) {

@@ -27,12 +27,21 @@ extern const font_t FONT_SMALL;   // names in list and labels
 extern const font_t FONT_MEDIUM;  // name of the tracked network
 extern const font_t FONT_LARGE;   // big numbers
 extern const font_t FONT_HUGE;    // target signal strength, full screen
+#if GFX_SCALED
+/* the 5" boards: font_glass_*.c stand in for the four above, half as big again, so a text is as
+ * wide in the layout's pixels as ever. TINY is what the pixel font is written in there */
+extern const font_t FONT_TINY;
+#endif
 // e-paper dashboard: DejaVu Sans Bold, read from across the room like ViewOwl's plates
 extern const font_t FONT_PAPER_S;  // ~10 px, small labels
 extern const font_t FONT_PAPER_M;  // ~13 px, names
 extern const font_t FONT_PAPER_L;  // ~20 px, title, dBm
 extern const font_t FONT_PAPER_XL; // ~34 px, the one big number
 extern const font_t FONT_PAPER_XXL;// ~63 px, digits, minus and "~ M" only: the target's dBm
+
+// a line's height and the baseline, in the layout's pixels
+#define FONT_LINE_H(f) GFX_UNZ((int)(f)->line_h)
+#define FONT_ASCENT(f) GFX_UNZ((int)(f)->ascent)
 
 // next code point from UTF-8 string, bad bytes give '?'
 uint32_t utf8_next(const char **s);

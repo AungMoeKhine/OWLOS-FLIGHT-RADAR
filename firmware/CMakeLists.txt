@@ -15,6 +15,8 @@ endif()
 # folder's sdkconfig is made
 if(RADAR_DISPLAY EQUAL 7 OR RADAR_DISPLAY EQUAL 9)   # the S3 boards with an LCD
     set(SDKCONFIG_DEFAULTS "${CMAKE_CURRENT_LIST_DIR}/sdkconfig.defaults;${CMAKE_CURRENT_LIST_DIR}/sdkconfig.defaults.s3lcd")
+elseif(RADAR_DISPLAY EQUAL 10 OR RADAR_DISPLAY EQUAL 11)   # and those with an RGB panel
+    set(SDKCONFIG_DEFAULTS "${CMAKE_CURRENT_LIST_DIR}/sdkconfig.defaults;${CMAKE_CURRENT_LIST_DIR}/sdkconfig.defaults.s3lcd;${CMAKE_CURRENT_LIST_DIR}/sdkconfig.defaults.s3rgb")
 endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)

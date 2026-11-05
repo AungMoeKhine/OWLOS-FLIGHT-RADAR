@@ -18,6 +18,23 @@
 
 #include "config.h"   // GFX_W, GFX_H come from the chosen display
 
+/* the layout's pixels and the glass's (config.h). what is drawn through the calls below is in the
+ * layout's, a strip's rows and gfx_row are in the glass's: the code that walks pixels by hand works
+ * there. GFX_Z a whole number of them across, GFX_PX where a layout pixel's middle falls on the
+ * glass, GFX_PL a length, GFX_UNZ a width on the glass back, rounded up. nothing at all but on
+ * the 5" boards */
+#if GFX_SCALED
+#define GFX_Z(v)   (((v) * 3) >> 1)
+#define GFX_PX(v)  ((v) * 1.5f + 0.25f)
+#define GFX_PL(v)  ((v) * 1.5f)
+#define GFX_UNZ(v) (((v) * 2 + 2) / 3)
+#else
+#define GFX_Z(v)   (v)
+#define GFX_PX(v)  (v)
+#define GFX_PL(v)  (v)
+#define GFX_UNZ(v) (v)
+#endif
+
 /* the ESP32-C3 (RISC-V, no F extension) has no floating point unit: a float costs tens of
  * cycles there, so the busiest loops take a whole number way. the ESP32's float is quicker */
 #ifndef GFX_SOFT_FLOAT                // the PC preview may set it, to see the C3's way drawn
@@ -29,7 +46,7 @@
 #endif
 
 typedef struct {
-    uint32_t *px;   /* GFX_W * h pixels, 0x00RRGGBB, row by row */
+    uint32_t *px;   /* GFX_PW * h pixels, 0x00RRGGBB, row by row */
     int y0;         /* first screen row of the strip */
     int h;          /* rows in strip */
     int helper;     /* drawn by the second core (main.c): its time is not in ui_t.prof */
@@ -75,17 +92,28 @@ static inline float gfx_sqrt(float x)
     return x * y;
 }
 
-// pointer to screen row y, or 0 if its not in this strip
+// pointer to row y of the glass, or 0 if its not in this strip
 static inline uint32_t *gfx_row(const canvas_t *cv, int y)
 {
     int r = y - cv->y0;
-    return (r >= 0 && r < cv->h) ? cv->px + r * GFX_W : 0;
+    return (r >= 0 && r < cv->h) ? cv->px + r * GFX_PW : 0;
 }
 
 // is any of the rows ya..yb inside this strip?
 static inline int gfx_touches(const canvas_t *cv, int ya, int yb)
 {
-    return yb >= cv->y0 && ya < cv->y0 + cv->h;
+    return GFX_Z(yb) + GFX_SCALED >= cv->y0 && GFX_Z(ya) < cv->y0 + cv->h;
+}
+
+// the rows ya..yb of a strip as a canvas of their own: what is drawn on it stops there. 0: none here
+static inline int gfx_sub(const canvas_t *cv, int ya, int yb, canvas_t *out)
+{
+    int a = GFX_Z(ya), b = GFX_Z(yb + 1) - 1;
+    if (a < cv->y0) a = cv->y0;
+    if (b > cv->y0 + cv->h - 1) b = cv->y0 + cv->h - 1;
+    if (a > b) return 0;
+    *out = (canvas_t){ cv->px + (a - cv->y0) * GFX_PW, a, b - a + 1, cv->helper };
+    return 1;
 }
 
 void gfx_fill(canvas_t *cv, int x, int y, int w, int h, uint32_t c, int a);
@@ -108,5 +136,5 @@ void gfx_poly(canvas_t *cv, const float *xy, int n, uint32_t c, int a);
 void gfx_arc(canvas_t *cv, float cx, float cy, float r, float deg0, float deg1, float w,
              uint32_t c, int a);
 
-// dither strip to RGB565, high byte first like the panel wants
+// dither strip to RGB565, high byte first like the SPI panels want, low first for the RGB bus
 void gfx_pack565(const canvas_t *cv, uint16_t *out);

@@ -78,10 +78,35 @@ static int micro_index(unsigned char ch)
     return (p && ch) ? 36 + (int)(p - signs) : -1;      // careful: strchr finds the '\0' too
 }
 
+#if GFX_SCALED
+static int draw_glass(canvas_t *cv, const font_t *f, int x, int y, const char *utf8, uint32_t c, int a, int limit, int fade);
+static const glyph_t *find_glyph(const font_t *f, uint32_t cp);
+
+/* the pixel font has no half pixels: at one and at two times it is written in a smooth font of the
+ * same width instead, whose capitals stand where its letters stood */
+static void micro_smooth(canvas_t *cv, const font_t *f, int x, int y, const char *s, uint32_t c, int a, int scale)
+{
+    const glyph_t *cap = find_glyph(f, 'H');
+    const int top = GFX_Z(y) - (cap ? cap->yo : 0);
+    for (int i = 0; s[i]; i++) {
+        char t[3] = { s[i], 0, 0 };
+        if (t[0] >= 'a' && t[0] <= 'z') t[0] = (char)(t[0] - 'a' + 'A');
+        if (t[0] == '*') { t[0] = (char)0xC2; t[1] = (char)0xB0; }   // its degree sign
+        draw_glass(cv, f, GFX_Z(x + i * MICRO_ADV * scale), top, t, c, a, 1 << 20, 0);
+    }
+}
+#endif
+
 CORE_HOT int micro_text(canvas_t *cv, int x, int y, const char *s, uint32_t c, int a, int scale)
 {
     int x0 = x;
     if (!gfx_touches(cv, y, y + MICRO_H * scale)) return micro_width(s, scale);   // not in this strip, just measure
+#if GFX_SCALED
+    if (scale <= 2) {
+        micro_smooth(cv, scale == 1 ? &FONT_TINY : &FONT_MEDIUM, x, y, s, c, a, scale);
+        return micro_width(s, scale);
+    }
+#endif
     for (; *s; s++, x += MICRO_ADV * scale) {
         int gi = micro_index((unsigned char)*s);
         if (gi < 0) continue;
@@ -89,6 +114,11 @@ CORE_HOT int micro_text(canvas_t *cv, int x, int y, const char *s, uint32_t c, i
         for (int r = 0; r < 6; r++) {
             uint8_t bits = g[r];
             if (!bits) continue;
+#if GFX_SCALED
+            for (int col = 0; col < 3; col++)
+                if (bits & (0x80 >> col)) gfx_fill(cv, x + col * scale, y + r * scale, scale, scale, c, a);
+            continue;
+#endif
             for (int sy = 0; sy < scale; sy++) {
                 uint32_t *row = gfx_row(cv, y + r * scale + sy);
                 if (!row) continue;
@@ -96,7 +126,7 @@ CORE_HOT int micro_text(canvas_t *cv, int x, int y, const char *s, uint32_t c, i
                     if (!(bits & (0x80 >> col))) continue;
                     for (int sx = 0; sx < scale; sx++) {
                         int px = x + col * scale + sx;
-                        if (px >= 0 && px < GFX_W)
+                        if (px >= 0 && px < GFX_PW)
                             row[px] = a >= 256 ? c : gfx_mix(row[px], c, (uint32_t)a);
                     }
                 }
@@ -145,15 +175,15 @@ static const glyph_t *glyph_or_fallback(const font_t *f, uint32_t cp)
     return g;
 }
 
-/* text loop for all baked fonts. limit = first column that must stay clear (or big number).
- * NOTE: cut names fade out over the last FADE px instead of "...", at six pixels
+/* text loop for all baked fonts, on the glass. limit = first column that must stay clear (or big
+ * number). NOTE: cut names fade out over the last FADE px instead of "...", at six pixels
  * ellipsis looks like underscore and "Byt_Sokol_" could be a real network name */
-#define FADE 12
-CORE_HOT static int draw_text(canvas_t *cv, const font_t *f, int x, int y, const char *utf8, uint32_t c, int a,
+#define FADE GFX_Z(12)
+CORE_HOT static int draw_glass(canvas_t *cv, const font_t *f, int x, int y, const char *utf8, uint32_t c, int a,
                      int limit, int fade)
 {
     int x0 = x;
-    int hit = gfx_touches(cv, y, y + f->line_h);
+    int hit = y + f->line_h >= cv->y0 && y < cv->y0 + cv->h;
     while (*utf8) {
         const glyph_t *g = glyph_or_fallback(f, utf8_next(&utf8));
         if (!g) continue;
@@ -169,7 +199,7 @@ CORE_HOT static int draw_text(canvas_t *cv, const font_t *f, int x, int y, const
                     unsigned v = (b[col >> 1] >> ((col & 1) ? 0 : 4)) & 15;
                     if (!v) continue;
                     int px = x + g->xo + col;
-                    if (px < 0 || px >= GFX_W || px >= limit) continue;
+                    if (px < 0 || px >= GFX_PW || px >= limit) continue;
                     int k = (a * (int)(v * 17 + 1)) >> 8;   // v*17+1: 15 -> 256
                     // paper: the soft edges stay, paper.c rounds them to the panel's two greys
                     // (no dither), that is the halftone smoothing. no fade there, see font_text_clip
@@ -181,6 +211,12 @@ CORE_HOT static int draw_text(canvas_t *cv, const font_t *f, int x, int y, const
         x += g->adv;
     }
     return (x < limit ? x : limit) - x0;
+}
+
+// the same in the layout's pixels
+static int draw_text(canvas_t *cv, const font_t *f, int x, int y, const char *utf8, uint32_t c, int a, int limit, int fade)
+{
+    return GFX_UNZ(draw_glass(cv, f, GFX_Z(x), GFX_Z(y), utf8, c, a, limit == 1 << 20 ? limit : GFX_Z(limit), fade));
 }
 
 int font_text(canvas_t *cv, const font_t *f, int x, int y, const char *utf8, uint32_t c, int a)
@@ -216,5 +252,5 @@ int font_width(const font_t *f, const char *utf8)
         const glyph_t *g = glyph_or_fallback(f, utf8_next(&utf8));
         if (g) w += g->adv;
     }
-    return w;
+    return GFX_UNZ(w);
 }

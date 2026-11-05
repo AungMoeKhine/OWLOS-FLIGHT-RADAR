@@ -14,6 +14,11 @@ The site keeps the firmware of each version: a new number here keeps the one bef
   dim when there is no fresh position; CONFLICT, two planes closing on each other turn red.
 - A picked plane's panel is in bigger letters and says more when the plane sends it: what is set on the
   autopilot, airspeed and Mach, the wind where it is.
+- Fixed: on the 3.5" the map could stop coming until a restart, when the memory had broken into small
+  pieces. The map's reader now needs smaller ones.
+- Two 5" boards, experimental, never run on a real board here: Elecrow's CrowPanel Advance 5.0 and the
+  Guition JC8048W550, ESP32-S3 with an 800x480 screen on the RGB bus and capacitive touch. The same pages
+  as on the 3.5", half as big again, in the screen's own pixels. Tell us how it goes.
 
 ## 0.5
 
