@@ -36,14 +36,6 @@
   .box ol, .box ul { margin: 0; padding-left: 20px; color: var(--dim); }
   .box li { margin: 3px 0; }
   .box b { color: var(--focus); font-weight: 600; }
-  /* the film inside the photo: where the screen is in the picture (ViewOwl measured it) */
-  .hero { margin: 26px auto 0; max-width: 760px; }
-  .board { position: relative; }
-  .board-photo { width: 100%; display: block; filter: drop-shadow(0 12px 40px rgba(0, 212, 255, .16)) drop-shadow(0 4px 12px rgba(0, 0, 0, .7)); }
-  .board-screen { position: absolute; left: 16%; top: 10%; width: 71.5%; aspect-ratio: 3 / 2; display: block; background: #000; }
-  .cue { min-height: 52px; margin-top: 10px; text-align: center; }
-  .cue b { display: block; font: 700 18px "Cascadia Mono", Consolas, monospace; letter-spacing: 1px; color: var(--prim); }
-  .cue span { color: var(--dim); font-size: 15px; }
   .promo { margin: 22px auto 0; max-width: 760px; text-align: center; }
   .promo video { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: #050b16; }
   .promo p { margin: 8px 0 0; color: var(--dim); font-size: 15px; }
@@ -149,23 +141,9 @@
        Flash it below, then send it your WiFi and your home point over the same USB cable.</p>
   </header>
 
-  <!-- the how-to film in a photo of the 3.5" board: the board's own screen code playing touches
-       (tools/preview/tour.c). what each part shows comes from the film's captions, under the board -->
-  <section class="hero">
-    <div class="board">
-      <img class="board-photo" src="img/board-35.png" alt="an ESP32 board with a 3.5 inch screen">
-      <video class="board-screen" src="shots/st7796/tour.mp4" poster="shots/st7796/tour.png"
-             autoplay muted loop playsinline preload="metadata"
-             aria-label="how to use it: tap a plane, drag the rim to turn the map, drag inside to zoom, HUE, LIST, SET">
-        <track id="cues" kind="captions" src="shots/st7796/tour.vtt" srclang="en" label="English" default>
-      </video>
-    </div>
-    <div class="cue" aria-live="polite"><b id="cue1">THE PLANES AROUND YOUR HOME</b><span id="cue2">home in the middle, each one turned the way it flies</span></div>
-  </section>
-
-  <!-- the short film for the posts: the 5" glass and what 0.6 added (TOUR.BAT promo) -->
+  <!-- the film: the board's own screen code playing touches over a demo sky (TOUR.BAT promo, tools/preview/tour.c) -->
   <section class="promo">
-    <video src="shots/promo.mp4" poster="shots/promo.png" width="996" height="560" controls muted playsinline preload="none"
+    <video src="shots/promo.mp4" poster="shots/promo.png" width="996" height="560" controls autoplay muted loop playsinline preload="metadata"
            aria-label="what it does: tap a plane, turn the map, zoom, the three looks, the radar's options from 0.6, the RGB LED"></video>
     <p>What it does and what 0.6 added, in about a minute. The planes are a demo sky on the PC simulator.</p>
   </section>
@@ -783,19 +761,6 @@
 const $ = id => document.getElementById(id);
 const utf8 = new TextEncoder();
 const bytes = s => utf8.encode(s).length;
-
-/* the film's captions go under the board, not over the picture: the track is read, not shown */
-{
-  const track = $('cues').track;
-  track.mode = 'hidden';
-  track.oncuechange = () => {
-    const c = track.activeCues && track.activeCues[0];
-    if (!c) return;
-    const [a, b] = c.text.split('\n');
-    $('cue1').textContent = a;
-    $('cue2').textContent = b || '';
-  };
-}
 
 $('show').onclick = () => {
   const p = $('pass');
