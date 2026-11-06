@@ -44,6 +44,9 @@
   .cue { min-height: 52px; margin-top: 10px; text-align: center; }
   .cue b { display: block; font: 700 18px "Cascadia Mono", Consolas, monospace; letter-spacing: 1px; color: var(--prim); }
   .cue span { color: var(--dim); font-size: 15px; }
+  .promo { margin: 22px auto 0; max-width: 760px; text-align: center; }
+  .promo video { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: #050b16; }
+  .promo p { margin: 8px 0 0; color: var(--dim); font-size: 15px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 18px; margin-top: 18px; }
   .card { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
   .card img { width: 100%; height: 190px; object-fit: contain; display: block; background: #020611; }
@@ -158,6 +161,13 @@
       </video>
     </div>
     <div class="cue" aria-live="polite"><b id="cue1">THE PLANES AROUND YOUR HOME</b><span id="cue2">home in the middle, each one turned the way it flies</span></div>
+  </section>
+
+  <!-- the short film for the posts: the 5" glass and what 0.6 added (TOUR.BAT promo) -->
+  <section class="promo">
+    <video src="shots/promo.mp4" poster="shots/promo.png" width="996" height="560" controls muted playsinline preload="none"
+           aria-label="what it does: tap a plane, turn the map, zoom, the three looks, the radar's options from 0.6, the RGB LED"></video>
+    <p>What it does and what 0.6 added, in about a minute. The planes are a demo sky on the PC simulator.</p>
   </section>
 
   <h2 class="step">1 <span>/</span> FLASH THE BOARD</h2>

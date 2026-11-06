@@ -6,6 +6,10 @@
 
 Questions, ideas, a photo of your board: [our group on Facebook](https://www.facebook.com/groups/OWLOS).
 
+[![What it does and what 0.6 added: on this frame an emergency round home blinks the RGB LED red](shots/promo.png)](https://kirindenis.github.io/OWLOS-FLIGHT-RADAR/shots/promo.mp4)
+
+**[Watch what it does and what 0.6 added](https://kirindenis.github.io/OWLOS-FLIGHT-RADAR/shots/promo.mp4)**, about a minute. The planes are a demo sky on the PC simulator.
+
 The planes around your home on a small ESP32 board with a screen. Each plane is a silhouette turned the
 way it flies, coloured by its height, with a trail behind it. Tap one for its callsign, type, height and
 speed. The planes come from the free community ADS-B networks, or from Flightradar24 if you have a key.

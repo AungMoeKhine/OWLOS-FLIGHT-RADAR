@@ -319,8 +319,9 @@ void setup_draw(ui_t *u, canvas_t *cv)
                 small_key(u, &lc, SB_X, y + SK_Y, HIT_SDEC + i, 0);
                 small_key(u, &lc, SB_X + SB_W + 4, y + SK_Y, HIT_SINC + i, 1);
             } else if (ROWS[i].kind == K_BTN) {
-                int pressed = u->t_down && !u->t_moved && u->t_hit == HIT_SBTN + i;
-                button_font(&lc, SB_X, y + SK_Y, 2 * SB_W + 4, SK_H, v, pressed ? 2 : 0, &FONT_SMALL);
+                /* a switch that is on is lit: ON and OFF in the same box read as nothing happened */
+                int pressed = u->t_down && !u->t_moved && u->t_hit == HIT_SBTN + i, on = !strcmp(v, "ON");
+                button_font(&lc, SB_X, y + SK_Y, 2 * SB_W + 4, SK_H, v, pressed ? 2 : on, &FONT_SMALL);
             }
         }
         int total = setup_rows(u) * ROW_H, view = y1 - LIST_Y0;
