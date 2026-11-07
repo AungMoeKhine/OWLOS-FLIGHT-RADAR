@@ -4,6 +4,14 @@ What changed in each version of OWLOS Flight Radar, the newest first. The first 
 version: the firmware is built with it, the site publishes it, and a board compares its own with it.
 The site keeps the firmware of each version: a new number here keeps the one before it as it was.
 
+## 0.8
+
+- The board remembers five WiFi networks and joins whichever it finds. A saved one joins with a tap on the
+  WiFi page, and the site shows them, each with FORGET.
+- A new page: a picture of how the planes reach your board, one CONNECT button, and all your boards at once,
+  each with its own live screen and settings. The page you know stays, a link away.
+- A board says which build it runs and its MAC when a page asks, so a page can keep several boards apart.
+
 ## 0.7
 
 - The radar in your browser, on the site's radar page: the same screen code as on the board. A demo sky at

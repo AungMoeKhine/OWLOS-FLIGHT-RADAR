@@ -28,6 +28,7 @@
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "esp_random.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -47,10 +48,13 @@ static sky_t             s_sky;        // written by the fetch task, under s_loc
 static demo_t            s_demo;
 static fr_cfg_t          s_cfg;        // the settings in use: the screen changes them, the site too
 static secrets_t         s_sec;
+static nets_t            s_nets;       // the networks it remembers, the first is the one in s_sec
 static SemaphoreHandle_t s_lock;
 static TaskHandle_t      s_fetch;
 static ui_t              s_ui;
 static volatile int      s_cfg_new;    // the site sent settings: the screen takes s_cfg
+static volatile int      s_skip_align; // the page said skip the touch alignment
+static volatile int      s_align_told = -1;   // what the page last heard of it, -1: tell it again
 static char              s_server[24];
 static int               s_http;
 static uint32_t          s_fetched;
@@ -673,18 +677,22 @@ static const char *json_esc(const char *s, char *out, int cap)
 static void say_cfg(void)
 {
     char ssid[70], place[84], country[68], watch[WATCH_TEXT];
+    static char nets[NETS_KEPT * 72];                  // used under the lock: the site's line and the screen both say this
     lock();
     watch_text(&s_watch, watch, sizeof watch);         // letters, digits, dashes and commas: nothing to escape
+    nets[0] = 0;
+    for (int i = 0, at = 0; i < s_nets.count; i++)     // names only: a password goes in, never out
+        at += snprintf(nets + at, sizeof nets - (size_t)at, "%s\"%s\"", i ? "," : "", json_esc(s_nets.n[i].ssid, ssid, sizeof ssid));
     int led = 0;                                       // the LED's events as bits: 1 sos, 2 in range, 4 take-off, 8 landing, 16 near, 32 no data
     for (int ev = 0; ev < LIGHT_EVENTS; ev++) led |= s_light_cfg.on[ev] ? 1 << ev : 0;
-    printf("OWLOS CFG {\"ssid\":\"%s\",\"lat\":%.5f,\"lon\":%.5f,\"place\":\"%s\",\"country\":\"%s\",\"src\":\"%s\",\"key\":%s,"
+    printf("OWLOS CFG {\"ssid\":\"%s\",\"nets\":[%s],\"lat\":%.5f,\"lon\":%.5f,\"place\":\"%s\",\"country\":\"%s\",\"src\":\"%s\",\"key\":%s,"
            "\"up\":%d,\"flip\":%d,\"theme\":%d,\"look\":%d,\"map\":%d,\"ground\":%d,\"watch\":\"%s\","
            "\"vectors\":%d,\"beam_step\":%d,\"clock\":%d,\"block\":%d,\"autopilot\":%d,\"lost\":%d,\"conflict\":%d,"
            "\"fl_lo\":%d,\"fl_hi\":%d,\"utc\":%u,"
            "\"led\":%d,\"led_level\":%d,\"led_hold\":%d,\"led_near\":%d,\"led_red\":%d,\"version\":\"%s\",\"newest\":\"%s\","
            "\"uptime\":%u,\"ran\":%u,\"reset\":\"%s\",\"screen\":%d,"
            "\"range\":%.2f,\"dist_unit\":%d,\"alt_unit\":%d,\"labels\":%d}\n",
-           json_esc(s_sec.ssid, ssid, sizeof ssid), (double)s_cfg.lat, (double)s_cfg.lon,
+           json_esc(s_sec.ssid, ssid, sizeof ssid), nets, (double)s_cfg.lat, (double)s_cfg.lon,
            json_esc(s_cfg.place, place, sizeof place), json_esc(s_cfg.country, country, sizeof country),
            s_cfg.source == SRC_FR24 ? "fr24" : "free", s_sec.key[0] ? "true" : "false", s_cfg.up, s_cfg.flip,
            s_cfg.theme, s_cfg.look, s_cfg.map, s_cfg.ground, watch, s_opt.vectors, s_opt.beam_step, s_opt.clock,
@@ -696,11 +704,55 @@ static void say_cfg(void)
     unlock();
 }
 
+/* the list changed: its first network is what the secrets keep, the others are saved here */
+static void nets_changed(secrets_t *s)
+{
+    memcpy(s->ssid, s_nets.n[0].ssid, sizeof s->ssid);
+    memcpy(s->pass, s_nets.n[0].pass, sizeof s->pass);
+    store_save_nets(&s_nets);
+}
+
+/* the name of this build on the site */
+static const char *board_name(void)
+{
+#if RADAR_DISPLAY == DISPLAY_ILI9341_320x240
+    return "ili9341";
+#elif RADAR_DISPLAY == DISPLAY_ST7796_480x320
+    return "st7796";
+#elif RADAR_DISPLAY == DISPLAY_ILI9486_480x320
+    return "ili9486";
+#elif RADAR_DISPLAY == DISPLAY_GC9A01_240x240
+    return "gc9a01";
+#elif RADAR_DISPLAY == DISPLAY_ES3C28P_320x240
+    return "es3c28p";
+#elif RADAR_DISPLAY == DISPLAY_NMCYDC5_320x240
+    return "nmcydc5";
+#elif RADAR_DISPLAY == DISPLAY_CROWADV28_320x240
+    return "crowadv28";
+#elif RADAR_DISPLAY == DISPLAY_CROWADV50_800x480
+    return "crowadv50";
+#elif RADAR_DISPLAY == DISPLAY_JC8048W550_800x480
+    return "jc8048w550";
+#else
+    return "other";
+#endif
+}
+
+/* who is on this cable: the page keeps several boards apart by the MAC, a port's number can change */
+static void say_ready(void)
+{
+    uint8_t m[6] = { 0 };
+    esp_read_mac(m, ESP_MAC_WIFI_STA);
+    printf("OWLOS READY flight-radar %s %s %02x%02x%02x%02x%02x%02x\n", FLIGHT_VERSION, board_name(), m[0], m[1], m[2], m[3], m[4], m[5]);
+}
+
 static void on_line(const char *line)
 {
-    if (!strncmp(line, "OWLOS HELLO", 11)) { printf("OWLOS READY flight-radar %s\n", FLIGHT_VERSION); return; }
+    if (!strncmp(line, "OWLOS HELLO", 11)) { say_ready(); return; }
     if (!strncmp(line, "OWLOS GET", 9)) { say_cfg(); return; }
+    if (!strcmp(line, "OWLOS SKIP")) { s_skip_align = 1; return; }
     if (!strcmp(line, "OWLOS SKY ON")) {               // the page's radar, see sky_out
+        s_align_told = -1;
         int was = page_there();
         s_sky_until = now_ms() + SKY_OUT_MS;
         if (!was) xTaskNotifyGive(s_fetch);            // the first answer now, not in five seconds
@@ -725,6 +777,8 @@ static void on_line(const char *line)
     int wifi = 0, home = 0;
     if (json_str(j, "ssid", sec.ssid, sizeof sec.ssid)) wifi = 1;
     if (json_str(j, "pass", sec.pass, sizeof sec.pass)) wifi = 1;
+    char forget[33] = "";
+    json_str(j, "forget", forget, sizeof forget);
     json_str(j, "key", sec.key, sizeof sec.key);
     if (json_num(j, "lat", &v)) { c.lat = (float)v; home = 1; }
     if (json_num(j, "lon", &v)) { c.lon = (float)v; home = 1; }
@@ -781,6 +835,12 @@ static void on_line(const char *line)
     if (json_num(j, "screen", &v) && v >= 0 && v < LCD_PROFILES) s_screen_set = (int)v;   // the screen's start-up, board.h LCD_PROFILES: on the CYD 0 v1, 1 v2, 2 v3
 #endif
     if (c.lat < -90 || c.lat > 90 || c.lon < -180 || c.lon > 180) { printf("OWLOS ERR home is not on Earth\n"); return; }
+    lock();
+    if (wifi && sec.ssid[0]) nets_put(&s_nets, sec.ssid, sec.pass);
+    else if (wifi) nets_forget(&s_nets, s_sec.ssid);    // "ssid":"": the one in use goes, the next takes its place
+    if (forget[0] && nets_forget(&s_nets, forget)) wifi = 1;
+    if (wifi) nets_changed(&sec);
+    unlock();
     store_save_secrets(&sec);
     store_save_cfg(&c);
     lock();
@@ -809,23 +869,24 @@ static void on_line(const char *line)
         store_save_watch(watch);
         ESP_LOGI(TAG, "watch list from the site: %s", watch[0] ? watch : "none");
     }
-    if (wifi) net_reconnect(&sec);
+    if (wifi) net_reconnect(&s_nets);
     ESP_LOGI(TAG, "settings from the site: network \"%s\", home %.4f %.4f, %s%s", sec.ssid, (double)c.lat, (double)c.lon,
              c.source == SRC_FR24 ? "FR24" : "free networks", sec.key[0] ? ", FR24 key stored" : "");
     printf("OWLOS OK\n");
     xTaskNotifyGive(s_fetch);
 }
 
-/* the screen's WiFi page: a network and the password typed for it. they go where the site's go,
- * and the screen's copy of the password is wiped here */
+/* the screen's WiFi page: a network and the password typed for it, none typed for one it knows.
+ * they go where the site's go, and the screen's copy of the password is wiped here */
 static void wifi_from_screen(void)
 {
     secrets_t sec;
     lock();
     sec = s_sec;
+    const net_kept_t *kept = nets_find(&s_nets, s_ui.wifi_ssid);
+    nets_put(&s_nets, s_ui.wifi_ssid, kept && !s_ui.wifi_pass[0] ? kept->pass : s_ui.wifi_pass);
+    nets_changed(&sec);
     unlock();
-    snprintf(sec.ssid, sizeof sec.ssid, "%s", s_ui.wifi_ssid);
-    snprintf(sec.pass, sizeof sec.pass, "%s", s_ui.wifi_pass);
     memset(s_ui.wifi_pass, 0, sizeof s_ui.wifi_pass);
     store_save_secrets(&sec);
     lock();
@@ -834,7 +895,7 @@ static void wifi_from_screen(void)
     s_sky.status = SKY_CONNECTING;
     s_wifi_try = now_ms();
     unlock();
-    net_reconnect(&sec);
+    net_reconnect(&s_nets);
     memset(sec.pass, 0, sizeof sec.pass);
     ESP_LOGI(TAG, "WiFi from the screen: network \"%s\"", sec.ssid);
     xTaskNotifyGive(s_fetch);
@@ -1027,6 +1088,10 @@ static void ui_task(void *arg)
         }
 #endif
         if (ev) ui_button(&s_ui, ev == BTN_LONG ? 2 : 1, &cmd);
+        if (s_skip_align) {
+            s_skip_align = 0;
+            if (s_ui.view == VIEW_CAL) ui_button(&s_ui, 1, &cmd);
+        }
         touch_sample(1);
         int finger = 0;                                // a sample comes every frame, with a finger or without
         for (int i = 0; i < s_nts; i++) finger |= s_ts[i].down;
@@ -1134,6 +1199,10 @@ static void ui_task(void *arg)
                 s_sel_told = s_ui.sel;
                 printf("OWLOS SEL %06x\n", (unsigned)s_ui.sel);
             }
+            if ((s_ui.view == VIEW_CAL) != s_align_told) {   // its screen waits for crosses: the page says so
+                s_align_told = s_ui.view == VIEW_CAL;
+                printf("OWLOS ALIGN %d\n", s_align_told);
+            }
         }
         uint8_t rgb[3];
         lock();
@@ -1156,7 +1225,7 @@ static void ui_task(void *arg)
         n->demo = (uint8_t)s_demo_on;
         n->wifi = (uint8_t)net_up();
         n->why = (uint8_t)net_why();
-        snprintf(n->ssid, sizeof n->ssid, "%s", s_sec.ssid);
+        net_ssid(n->ssid, sizeof n->ssid);
         snprintf(n->server, sizeof n->server, "%s", s_server);
         n->http = s_http;
         n->fetched = s_fetched;
@@ -1168,6 +1237,7 @@ static void ui_task(void *arg)
         int naps = 0;
         n->scan = (uint8_t)net_scan_get(n->aps, &naps);   // what the WiFi page shows
         n->n_aps = (uint8_t)naps;
+        for (int k = 0; k < naps; k++) n->aps[k].kept = nets_find(&s_nets, n->aps[k].ssid) != NULL;
 
 #if DISP_HELPER
         helper_set(s_ui.view == VIEW_MAIN && s_ui.cfg.look == LOOK_RADAR);
@@ -1262,6 +1332,7 @@ void app_main(void)
     s_lock = xSemaphoreCreateMutex();
     if (!store_load_cfg(&s_cfg)) fr_cfg_defaults(&s_cfg);
     store_load_secrets(&s_sec);
+    store_load_nets(&s_sec, &s_nets);
     char watch[WATCH_TEXT];
     store_load_watch(watch, sizeof watch);
     watch_set(&s_watch, watch);
@@ -1272,7 +1343,7 @@ void app_main(void)
     demo_init(&s_demo, range_km(&s_cfg), esp_random());
     tiles_init();
     map_mem = iram_first;
-    net_start(&s_sec);                                 // up even without settings: a SET then just connects
+    net_start(&s_nets);                                // up even without settings: a SET then just connects
     /* the TLS handshake runs on the fetch task, and the map is made there. one core (the C3): it
      * gets the screen's priority, the two take turns a tick each. under the screen it had less
      * than a millisecond a frame, a map took it over ten seconds and IDLE starved into the watchdog */
@@ -1281,5 +1352,5 @@ void app_main(void)
     /* the console last, and READY with it: the site sends its SET the moment it reads READY. said
      * before, the SET was lost (no console yet) or notified a fetch task not made yet (an assert) */
     console_start(on_line);
-    printf("OWLOS READY flight-radar %s\n", FLIGHT_VERSION);
+    say_ready();
 }

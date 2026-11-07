@@ -119,6 +119,12 @@ on the site; none of the built ones here has been run on that board yet unless i
   S3's own USB pins, so the console stays off that USB here. Missing: a second source. One manual
   lists a version without touch.
 
+## Guition 4.3": asked 2026-11-07, model not named
+
+- Asked: will one of the binaries work with the older Guition 4.3" ESP32 modules? No 4.3" build exists.
+- An 800x480 RGB one (Sunton ESP32-8048S043 and its kin) may take the JC8048W550 build, not tried and its
+  pins not checked. The 480x272 JC4827W543 (QSPI NV3041A) needs a new build. Missing: the exact model.
+
 ## Elecrow CrowPanel Advance 5.0": built 2026-11-05, experimental, runs on a viewer's V1.3
 
 - Asked 2026-11-05: "Any chance for a 5" board like an elecrow advanced 5"?" The second ask for 800x480,

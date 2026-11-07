@@ -1,5 +1,5 @@
 # every board's driver is in here, each file compiles to nothing unless board.h picks it
-idf_component_register(SRCS "main.c" "net.c" "store.c" "console.c" "button.c" "touch.c"
+idf_component_register(SRCS "main.c" "net.c" "nets.c" "store.c" "console.c" "button.c" "touch.c"
                             "lcd_spi.c" "lcd_rgb.c" "lcd_ili9486.c" "epd.c" "i2c_bus.c" "tiles.c" "led.c"
                        INCLUDE_DIRS "."
                        REQUIRES core esp_lcd esp_driver_spi esp_driver_gpio esp_driver_ledc esp_driver_i2c esp_driver_rmt

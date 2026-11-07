@@ -83,6 +83,9 @@ The map under them comes from OpenStreetMap.
   network, type its password, JOIN. The home is typed there too: SET, the HOME row.
 - From the site, step 2: the WiFi, your home point, where the planes come from and how the screen shows,
   sent over the same USB cable. The round board and the RPi LCD take their WiFi this way.
+- The board remembers five networks, the last one set first, and joins whichever it finds: at home, at a
+  second home, on a phone's hotspot. A sixth takes the oldest one's place. The site shows them, each with
+  **FORGET**.
 - Till it gets a home the board sits in Trenčín, Slovakia. The plane network only hears the home rounded
   to about a kilometre: enough to say where to look, not where you live. A town or a postcode typed on
   the board goes to OpenStreetMap's Nominatim to be found.
@@ -170,7 +173,7 @@ The pictures are the 3.5" board, the 2.8" one has the same screens a little smal
 ![The WiFi networks the board hears, with arrows](shots/guide/wifi.png)
 
 - The networks the board hears, the strongest first. A lock asks for a password, OPEN does not, SET is
-  the one in use.
+  the one in use, SAVED one it remembers: a tap joins it with no typing.
 - **Tap your network**. **LOOK AGAIN** looks round once more. The ESP32 hears 2.4 GHz networks only.
 
 ### The password
@@ -312,7 +315,8 @@ What is where:
 The site talks to the board over the USB cable at 115200 baud, a line each way. Scripts can do the same.
 
 - `OWLOS HELLO` is answered with `OWLOS READY flight-radar <version>`.
-- `OWLOS GET` is answered with `OWLOS CFG {...}`: the network's name, home (`lat`, `lon`, `place`,
+- `OWLOS GET` is answered with `OWLOS CFG {...}`: the network's name, `nets` (all it remembers, names
+  only; `OWLOS SET {"forget":"name"}` takes one out), home (`lat`, `lon`, `place`,
   `country`), `src`, whether a `key` is stored, `up`, `flip`, `theme`, `look`, `map`, `ground`, `watch`,
   `vectors`, `beam_step`, `clock`, `block`, `autopilot`, `lost`, `conflict`, `fl_lo`, `fl_hi`, `utc` (seconds
   since 1970, 0 not known), `led`, `led_level`, `led_hold`, `led_near`, `led_red`, `version`, `newest` (the site's, `""` not heard

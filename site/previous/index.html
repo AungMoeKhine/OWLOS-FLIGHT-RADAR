@@ -1,0 +1,1259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<base href="../">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OWLOS Flight Radar - flash it from the browser</title>
+<meta name="description" content="The planes around your home on an ESP32 board with a screen. Flash it from Chrome or Edge, a Chromebook too, then send it your WiFi and your home point over the same USB cable.">
+<script type="module" src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"></script>
+<style>
+  :root {
+    --bg0: #03081a; --bg1: #0a1a36; --panel: #0b2142; --line: #1d4a78;
+    --prim: #5ce1ff; --focus: #eaf7ff; --dim: #8fb2d2; --warn: #ffb848; --bad: #ff6070; --good: #7dffa8;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }   /* or a display: grid of the same element wins over it */
+  html { background: var(--bg0); }
+  body {
+    margin: 0; color: var(--focus);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(1200px 600px at 50% -10%, var(--bg1), var(--bg0)) fixed;
+  }
+  a { color: var(--prim); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 32px 16px 48px; }
+  header h1 {
+    margin: 0; font: 700 34px/1.15 "Cascadia Mono", Consolas, monospace; letter-spacing: 1px;
+    color: var(--prim); text-shadow: 0 0 18px rgba(92, 225, 255, .35);
+  }
+  header p { margin: 8px 0 0; color: var(--dim); max-width: 780px; }
+  h2.step {
+    margin: 34px 0 12px; font: 700 20px "Cascadia Mono", Consolas, monospace; letter-spacing: 1px; color: var(--prim);
+  }
+  h2.step span { color: var(--dim); font-weight: 400; }
+  .box {
+    padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: rgba(11, 33, 66, .55);
+  }
+  .box ol, .box ul { margin: 0; padding-left: 20px; color: var(--dim); }
+  .box li { margin: 3px 0; }
+  .box b { color: var(--focus); font-weight: 600; }
+  .promo { margin: 22px auto 0; max-width: 760px; text-align: center; }
+  .promo video { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: #050b16; }
+  .promo p { margin: 8px 0 0; color: var(--dim); font-size: 15px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 18px; margin-top: 18px; }
+  .card { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+  .card img { width: 100%; height: 190px; object-fit: contain; display: block; background: #020611; }
+  .card .body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .card .flash { margin-top: auto; }
+  .card h3 { margin: 0; font-size: 18px; }
+  .spec { color: var(--dim); font-size: 14px; }
+  .btn, .flash button {
+    width: 100%; padding: 11px 14px; border: 1px solid var(--prim); border-radius: 8px; cursor: pointer;
+    font: 700 15px "Cascadia Mono", Consolas, monospace; letter-spacing: 1px;
+    color: var(--bg0); background: var(--prim);
+  }
+  .btn.quiet { background: transparent; color: var(--prim); }
+  .btn:hover, .flash button:hover { filter: brightness(1.1); }
+  .btn:disabled { opacity: .5; cursor: default; filter: none; }
+  .nope { font-size: 14px; color: var(--warn); }
+  form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
+  fieldset { grid-column: 1 / -1; margin: 0; padding: 12px 14px 14px; border: 1px solid var(--line); border-radius: 10px; }
+  legend { padding: 0 6px; color: var(--prim); font: 700 14px "Cascadia Mono", Consolas, monospace; letter-spacing: 1px; }
+  .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 16px; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--dim); }
+  input[type=text], input[type=password], input[type=number], select {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px;
+    background: #061226; color: var(--focus); font: 15px "Cascadia Mono", Consolas, monospace;
+  }
+  input:focus { outline: 2px solid var(--prim); outline-offset: 0; border-color: var(--prim); }
+  .pw { display: flex; gap: 6px; }
+  .pw button { flex: none; width: 64px; padding: 0; font-size: 13px; }
+  .radios { display: flex; flex-direction: column; gap: 8px; color: var(--focus); }
+  .radios label { flex-direction: row; align-items: flex-start; gap: 8px; color: var(--focus); font-size: 15px; }
+  .radios small { display: block; color: var(--dim); font-size: 13px; }
+  .note { font-size: 13px; color: var(--dim); }
+  #nets div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+  /* what FIND and USE MY LOCATION found, under the home's fields: the list under SEND is out of sight there */
+  .found { margin: 10px 0 0; font: 14px/1.5 "Cascadia Mono", Consolas, monospace; color: var(--dim); }
+  .found:empty { display: none; }
+  .found.ok { color: var(--good); }
+  .found.bad { color: var(--bad); }
+  .found.wait { color: var(--warn); }
+  .actions { grid-column: 1 / -1; display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+  #status { grid-column: 1 / -1; margin: 0; padding: 0; list-style: none; font: 14px/1.6 "Cascadia Mono", Consolas, monospace; }
+  #status li::before { content: "> "; color: var(--line); }
+  #status .ok { color: var(--good); }
+  #status .bad { color: var(--bad); }
+  #status .wait { color: var(--warn); }
+  details { grid-column: 1 / -1; color: var(--dim); font-size: 13px; }
+  details pre { margin: 6px 0 0; max-height: 220px; overflow: auto; padding: 8px 10px; border: 1px solid var(--line);
+                border-radius: 8px; background: #020611; white-space: pre-wrap; word-break: break-all; }
+  /* step 3: a picture of each screen with arrows to where to tap (tools/Guide), what it does under it */
+  .how { display: grid; gap: 30px; }
+  .how figure { margin: 0; }
+  .how figure > a { display: block; }
+  .how img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--bg0); }
+  .how img.narrow { max-width: 1080px; margin: 0 auto; }
+  .how figcaption { margin-top: 10px; }
+  .how h3 { margin: 0 0 6px; font: 700 16px "Cascadia Mono", Consolas, monospace; letter-spacing: 1px; color: var(--prim); }
+  .how ul { margin: 0; padding-left: 20px; color: var(--dim); }
+  .how li { margin: 3px 0; }
+  .how b { color: var(--focus); font-weight: 600; }
+  .lead { margin: -4px 0 14px; color: var(--dim); font-size: 15px; }
+  /* the 2.8" CYD's screen: three chips the board can't tell apart, BOOT picks one. said loud, in warn */
+  .boot {
+    margin-top: 18px; padding: 16px 18px; border: 2px solid var(--warn); border-radius: 12px;
+    background: rgba(255, 184, 72, .07); display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; align-items: center;
+  }
+  .boot h3 { margin: 0 0 8px; font: 700 20px/1.3 "Cascadia Mono", Consolas, monospace; letter-spacing: 1px; color: var(--warn); }
+  .boot p { margin: 0 0 8px; color: var(--dim); }
+  .boot ol { margin: 0 0 8px; padding-left: 22px; color: var(--focus); }
+  .boot li { margin: 4px 0; }
+  .boot b { color: var(--warn); }
+  .boot img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; }
+  .boot-tag {
+    display: block; padding: 8px 10px; border: 2px solid var(--warn); border-radius: 8px; text-align: center;
+    color: var(--warn); font: 700 14px "Cascadia Mono", Consolas, monospace; letter-spacing: 1px; text-decoration: none;
+  }
+  .boot-tag:hover { background: rgba(255, 184, 72, .1); }
+  footer { margin-top: 36px; color: var(--dim); font-size: 14px; }
+  .newest { margin: 0 0 10px; color: var(--dim); }
+  .newest b { color: var(--prim); font-family: "Cascadia Mono", Consolas, monospace; }
+  .older { margin: 0 0 12px; }
+  .older label { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 15px; }
+  .older select { width: auto; min-width: 180px; }
+  .older .nope { margin: 8px 0 0; }
+  .changes h3 { margin: 16px 0 6px; font: 700 16px "Cascadia Mono", Consolas, monospace; letter-spacing: 1px; color: var(--prim); }
+  .changes h3:first-of-type { margin-top: 4px; }
+  .changes h3 span { color: var(--dim); font-weight: 400; }
+  .changes > p { margin: 0; color: var(--dim); }
+  @media (max-width: 720px) {
+    form, .actions, .boot { grid-template-columns: 1fr; }
+    header h1 { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>OWLOS Flight Radar</h1>
+    <p>The planes around your home on an ESP32 board with a screen: each one a silhouette turned the way it
+       flies, coloured by its height, with a trail behind it. Tap one for its callsign, type, height and speed.
+       It takes the planes from the free community ADS-B networks, or from Flightradar24 if you have a key.
+       Flash it below, then send it your WiFi and your home point over the same USB cable.</p>
+  </header>
+
+  <!-- the film: the board's own screen code playing touches over a demo sky (TOUR.BAT promo, tools/preview/tour.c) -->
+  <section class="promo">
+    <video src="shots/promo.mp4" poster="shots/promo.png" width="996" height="560" controls autoplay muted loop playsinline preload="metadata"
+           aria-label="what it does: tap a plane, turn the map, zoom, the three looks, the radar's options from 0.6, the RGB LED"></video>
+    <p>What it does and what 0.6 added, in about a minute. The planes are a demo sky on the PC simulator.</p>
+    <p><a href="radar/">Try it in your browser</a>: a demo sky, or your own board's planes over the USB cable.</p>
+  </section>
+
+  <h2 class="step">1 <span>/</span> FLASH THE BOARD</h2>
+  <div class="box">
+    <p class="newest">The newest firmware: <b id="newest">@VERSION@</b>. <a href="#versions">What changed in each version.</a></p>
+    <!-- the older versions the site keeps, fw/versions.json (.github/archive.sh): shown when there are any -->
+    <div class="older" id="older" hidden>
+      <label>The buttons below flash: <select id="pick"></select></label>
+      <p class="nope" id="older-note" hidden></p>
+    </div>
+    <ol>
+      <li>Use <b>Chrome or Edge on a computer</b>, a Chromebook too. Flashing goes over Web Serial, phones and Firefox can't do it.</li>
+      <li>Plug the board in with a USB cable that carries data (some only charge).</li>
+      <li>Press <b>CONNECT &amp; FLASH</b> of your board, pick its port and say <b>yes to erase</b>: whatever was on the board is replaced.</li>
+      <li>No port in the list? On Windows the CH340 driver may be missing. Won't connect? Hold <b>BOOT</b> while you plug it in.</li>
+      <li>Boards with touch ask you once to press 5 crosses, so the touch knows where the screen is.</li>
+      <li><b>A 2.8" board with the picture mirrored or in wrong colours: press BOOT</b> in the first 8 seconds after
+          power on. <a href="#boot">How, under the boards.</a></li>
+      <li>Until it has WiFi the board flies a made-up <b>DEMO</b> sky and says so in big letters. The 2.8" and 3.5" CYD
+          take the WiFi right there: <b>SET UP WIFI</b>, tap your network, type its password (step 3 shows where).
+          Or send it from this page, step 2.</li>
+      <li>Close the flasher's window when it's done: the port is free again for step 2.</li>
+      <li><b>An update</b> is the same button, with <b>no to erase</b>: the board keeps its WiFi, home, watch list
+          and the rest. A board on WiFi finds out by itself when a new version is here: a small <b>NEW VERSION</b> note
+          on its screen opens ABOUT, which has a code to scan for this page.</li>
+    </ol>
+  </div>
+  <div class="grid">
+    <article class="card">
+      <img src="shots/02-live.png" alt="the radar on the 2.8 inch board" loading="lazy">
+      <div class="body">
+        <h3>2.8" CYD</h3>
+        <div class="spec">"Cheap yellow display", ESP32, 320x240, resistive touch. Sold with three different
+          screens, this one build fits them all. It starts as v2, the one most boards have.</div>
+        <a class="boot-tag" href="#boot">WRONG PICTURE? PRESS BOOT</a>
+        <esp-web-install-button class="flash" manifest="fw/ili9341/manifest.json">
+          <button slot="activate">CONNECT &amp; FLASH</button>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
+          <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
+        </esp-web-install-button>
+      </div>
+    </article>
+    <article class="card">
+      <img src="shots/02-live.png" alt="the radar on a 2.8 inch board" loading="lazy">
+      <div class="body">
+        <h3>2.8" LCDWIKI ES3C28P</h3>
+        <div class="spec">ESP32-S3, ILI9341V 320x240, capacitive touch. Its USB-C is the S3's own, no driver to
+          install. New: not run on one here yet, tell us how it goes in
+          <a href="https://www.facebook.com/groups/OWLOS">our group</a>.</div>
+        <a class="boot-tag" href="#boot">WRONG PICTURE? PRESS BOOT</a>
+        <esp-web-install-button class="flash" manifest="fw/es3c28p/manifest.json">
+          <button slot="activate">CONNECT &amp; FLASH</button>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
+          <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
+        </esp-web-install-button>
+      </div>
+    </article>
+    <article class="card">
+      <img src="shots/02-live.png" alt="the radar on a 2.8 inch board" loading="lazy">
+      <div class="body">
+        <h3>2.8" NM-CYD-C5</h3>
+        <div class="spec">The CYD's form on an ESP32-C5, ST7789 320x240, resistive touch. Either of its two
+          USB-C ports works. New: not run on one here yet, tell us how it goes in
+          <a href="https://www.facebook.com/groups/OWLOS">our group</a>.</div>
+        <a class="boot-tag" href="#boot">RED AND BLUE SWAPPED? PRESS BOOT</a>
+        <esp-web-install-button class="flash" manifest="fw/nmcydc5/manifest.json">
+          <button slot="activate">CONNECT &amp; FLASH</button>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
+          <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
+        </esp-web-install-button>
+      </div>
+    </article>
+    <article class="card">
+      <img src="shots/02-live.png" alt="the radar on a 2.8 inch board" loading="lazy">
+      <div class="body">
+        <h3>2.8" CrowPanel Advance</h3>
+        <div class="spec">Elecrow's 2.8" HMI, ESP32-S3, ST7789 320x240 IPS, capacitive touch. Either of its two
+          USB-C ports works. New: not run on one here yet, tell us how it goes in
+          <a href="https://www.facebook.com/groups/OWLOS">our group</a>.</div>
+        <a class="boot-tag" href="#boot">RED AND BLUE SWAPPED? PRESS BOOT</a>
+        <esp-web-install-button class="flash" manifest="fw/crowadv28/manifest.json">
+          <button slot="activate">CONNECT &amp; FLASH</button>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
+          <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
+        </esp-web-install-button>
+      </div>
+    </article>
+    <article class="card">
+      <img src="shots/crowadv50/02-live.png" alt="the radar on a 5 inch board" loading="lazy">
+      <div class="body">
+        <h3>5" CrowPanel Advance</h3>
+        <div class="spec">Elecrow's 5.0" HMI, V1.0 to V1.3, ESP32-S3, 800x480 IPS, capacitive touch. Experimental:
+          built from the maker's files, never run on a real board here. The screen may stay dark or shake. Tell
+          us how it goes in <a href="https://www.facebook.com/groups/OWLOS">our group</a>.</div>
+        <a class="boot-tag" href="#boot">RED AND BLUE SWAPPED? PRESS BOOT</a>
+        <esp-web-install-button class="flash" manifest="fw/crowadv50/manifest.json">
+          <button slot="activate">CONNECT &amp; FLASH</button>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
+          <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
+        </esp-web-install-button>
+      </div>
+    </article>
+    <article class="card">
+      <img src="shots/crowadv50/02-live.png" alt="the radar on a 5 inch board" loading="lazy">
+      <div class="body">
+        <h3>5" Guition JC8048W550</h3>
+        <div class="spec">ESP32-S3, 800x480, capacitive touch. Experimental: built from a board file, never run on a
+          real board here. The screen may stay dark or shake. Tell us how it goes in
+          <a href="https://www.facebook.com/groups/OWLOS">our group</a>.</div>
+        <a class="boot-tag" href="#boot">RED AND BLUE SWAPPED? PRESS BOOT</a>
+        <esp-web-install-button class="flash" manifest="fw/jc8048w550/manifest.json">
+          <button slot="activate">CONNECT &amp; FLASH</button>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
+          <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
+        </esp-web-install-button>
+      </div>
+    </article>
+    <article class="card">
+      <img src="shots/st7796/02-live.png" alt="the radar on the 3.5 inch board" loading="lazy">
+      <div class="body">
+        <h3>3.5" CYD</h3>
+        <div class="spec">ESP32, ST7796 480x320, resistive or capacitive touch (R and C versions, found by
+          itself). The board in the film: a bigger scope, the panel lists more planes.</div>
+        <esp-web-install-button class="flash" manifest="fw/st7796/manifest.json">
+          <button slot="activate">CONNECT &amp; FLASH</button>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
+          <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
+        </esp-web-install-button>
+      </div>
+    </article>
+    <article class="card">
+      <img src="shots/gc9a01/03-picked-heavy.png" alt="the radar on the round screen" loading="lazy">
+      <div class="body">
+        <h3>1.28" round</h3>
+        <div class="spec">Elecrow CrowPanel, ESP32-C3, GC9A01 240x240, capacitive touch. The scope is the whole
+          glass: tap a plane for its card, tap nothing for HUE, LIST and SET.</div>
+        <esp-web-install-button class="flash" manifest="fw/gc9a01/manifest.json">
+          <button slot="activate">CONNECT &amp; FLASH</button>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
+          <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
+        </esp-web-install-button>
+      </div>
+    </article>
+    <article class="card">
+      <img src="shots/ili9486/03-picked-heavy.png" alt="the radar on the 3.5 inch RPi LCD" loading="lazy">
+      <div class="body">
+        <h3>3.5" RPi LCD (ILI9486)</h3>
+        <div class="spec">Waveshare RPi LCD (A) on the OWLOSAirQuality board, ESP32, 480x320, no touch: BOOT
+          steps through the planes, hold it for the next range. Map up, colours and upside down come from step 2.</div>
+        <esp-web-install-button class="flash" manifest="fw/ili9486/manifest.json">
+          <button slot="activate">CONNECT &amp; FLASH</button>
+          <span slot="unsupported" class="nope">This browser can't flash. Use Chrome or Edge on a computer or a Chromebook.</span>
+          <span slot="not-allowed" class="nope">Flashing needs the page over https.</span>
+        </esp-web-install-button>
+      </div>
+    </article>
+  </div>
+
+  <!-- the 2.8" CYD is sold with three screen chips and the board can't tell which one it has: with the
+       wrong one the picture is mirrored or in wrong colours, and BOOT is the way out (main.c, pick_screen) -->
+  <section class="boot" id="boot">
+    <div>
+      <h3>2.8" BOARDS: WRONG PICTURE? PRESS BOOT</h3>
+      <p>The 2.8" CYD is sold with three different screen chips that look the same from outside, and the board
+         can't tell which one it has. It starts as <b>v2</b>, the one most boards have. Picture mirrored, upside
+         down, in wrong colours or like a negative: your screen is another one, and the <b>BOOT</b> button
+         switches it.</p>
+      <ol>
+        <li>Power the board on, or press <b>RST</b> and let go.</li>
+        <li>Within <b>8 seconds</b> press <b>BOOT</b> once, briefly. A card on the screen says which one is on
+            and shows the time left. On the 5 crosses page right after flashing BOOT works at any time.</li>
+        <li>Every press starts the screen as the next one: <b>v2</b>, then <b>v1</b>, then <b>v3</b>, and round
+            again. Press till the picture looks right.</li>
+        <li>That's all: the board keeps it, through a reset and a power cut.</li>
+      </ol>
+      <p>The <b>ES3C28P</b> has the same three to go through, it starts as v2 too. The <b>NM-CYD-C5</b> has two:
+         <b>RGB</b> first, then <b>BGR</b>. The <b>CrowPanel Advance</b> has the same two the other way round,
+         <b>BGR</b> first. The <b>5" boards</b> have them too, <b>RGB</b> first. Press BOOT if red and blue look
+         swapped.</p>
+      <p>Missed the 8 seconds? Press RST and start again. Don't hold BOOT while you press RST: that wakes the
+         flasher and the screen stays dark.</p>
+    </div>
+    <a href="shots/guide/screen.png" target="_blank"><img src="shots/guide/screen.png" loading="lazy"
+       alt="the 2.8 inch board in its first seconds: a card says SCREEN WRONG? PRESS BOOT and which screen is on"></a>
+  </section>
+
+  <h2 class="step">2 <span>/</span> SEND IT YOUR SETTINGS</h2>
+  <div class="box">
+    <form id="form" autocomplete="off" novalidate>
+      <fieldset>
+        <legend>WIFI</legend>
+        <div class="fields">
+          <label>Network name
+            <input id="ssid" type="text" maxlength="32" spellcheck="false" placeholder="2.4 GHz only">
+          </label>
+          <label>Password
+            <span class="pw">
+              <input id="pass" type="password" maxlength="63" spellcheck="false" placeholder="empty for an open network">
+              <button id="show" type="button" class="btn quiet">SHOW</button>
+            </span>
+          </label>
+        </div>
+        <p class="note">The ESP32 sees 2.4 GHz networks only. A router with one name for both bands works.
+          Leave both empty and the board keeps the WiFi it has, for one set on its own screen.
+          The board remembers five networks and joins whichever it finds, a sixth takes the oldest one's place.</p>
+        <div id="nets"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>HOME</legend>
+        <div class="fields">
+          <label>Latitude
+            <input id="lat" type="number" step="any" min="-90" max="90" placeholder="48.8945">
+          </label>
+          <label>Longitude
+            <input id="lon" type="number" step="any" min="-180" max="180" placeholder="18.0444">
+          </label>
+          <label>&nbsp;
+            <button id="locate" type="button" class="btn quiet">USE MY LOCATION</button>
+          </label>
+          <label>Town
+            <span class="pw">
+              <input id="place" type="text" maxlength="39" spellcheck="false" placeholder="found by itself">
+              <button id="lookup" type="button" class="btn quiet" title="a town you typed: its point; no town: the nearest one to the numbers (OpenStreetMap)">FIND</button>
+            </span>
+          </label>
+          <label>Country
+            <input id="country" type="text" maxlength="31" spellcheck="false" placeholder="found by itself">
+          </label>
+        </div>
+        <p id="found" class="found" aria-live="polite"></p>
+        <p class="note">The middle of the scope, kept on the board as you type it. Till you send one the board
+          sits in Trenčín, Slovakia; leave the numbers empty and it keeps the home it has. The plane network only hears it rounded to about a kilometre: enough to say
+          where to look, not where you live. <b>FIND</b> looks a town you type up on
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> and puts its
+          point in the numbers; with no town typed, it names the nearest one to the numbers, asked with the same rounded
+          point. Leave the town and the country empty and the board asks for them itself.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>WHERE THE PLANES COME FROM</legend>
+        <div class="radios">
+          <label><input type="radio" name="src" value="free" checked>
+            <span>Free networks <small>adsb.lol and adsb.fi: open networks of people with receivers on their roofs. No key, no account. If one doesn't answer the board asks the other.</small></span>
+          </label>
+          <label><input type="radio" name="src" value="fr24">
+            <span>Flightradar24 <small>Adds where each flight comes from and goes to. Needs a key from a paid
+              <a href="https://fr24api.flightradar24.com/" target="_blank" rel="noopener">Flightradar24 API</a> subscription; it is asked less often, every 20 s, to save your credits.</small></span>
+          </label>
+        </div>
+        <div class="fields" id="keyrow" hidden style="margin-top:12px">
+          <label>Flightradar24 API key
+            <input id="key" type="password" maxlength="590" spellcheck="false" placeholder="the token from your FR24 API account">
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>THE SCREEN</legend>
+        <div class="fields">
+          <label>Map up
+            <select id="up">
+              <option value="">keep as it is</option><option value="0">north</option><option value="90">east</option>
+              <option value="180">south</option><option value="270">west</option>
+            </select>
+          </label>
+          <label>Mounted
+            <select id="flip">
+              <option value="">keep as it is</option><option value="0">the right way up</option><option value="1">upside down</option>
+            </select>
+          </label>
+          <label>Colours
+            <select id="theme">
+              <option value="">keep as it is</option><option value="0">Arctic</option><option value="1">Phosphor</option>
+              <option value="2">Amber</option><option value="3">Crimson</option><option value="4">Synth</option>
+            </select>
+          </label>
+          <label>Look
+            <select id="look">
+              <option value="">keep as it is</option><option value="0">radar, the beam over the map</option>
+              <option value="1">square map with its grid</option><option value="2">classic: the square map in its own colours</option>
+            </select>
+          </label>
+          <label>Map under the scope
+            <select id="map">
+              <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
+            </select>
+          </label>
+          <label>Planes on the ground
+            <select id="ground">
+              <option value="">keep as it is</option><option value="1">shown</option>
+              <option value="0">hidden: next to an airport</option>
+            </select>
+          </label>
+          <label>Radar: the lowest height shown, in flight levels (100 is 10 000 ft, 0 no limit)
+            <input id="fl_lo" type="number" min="0" max="450" step="10" placeholder="keep as it is">
+          </label>
+          <label>Radar: the highest height shown (0 no limit)
+            <input id="fl_hi" type="number" min="0" max="450" step="10" placeholder="keep as it is">
+          </label>
+          <label>Radar: labels say climbing and speed
+            <select id="block">
+              <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
+            </select>
+          </label>
+          <label>Radar: labels say the height set on the autopilot
+            <select id="autopilot">
+              <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
+            </select>
+          </label>
+          <label>Radar: a line ahead of each plane
+            <select id="vectors">
+              <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
+            </select>
+          </label>
+          <label>Radar: planes move as the beam passes
+            <select id="beam_step">
+              <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
+            </select>
+          </label>
+          <label>Radar: the time in UTC
+            <select id="clock">
+              <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
+            </select>
+          </label>
+          <label>Radar: planes with no fresh position go dim
+            <select id="lost">
+              <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
+            </select>
+          </label>
+          <label>Radar: two planes closing on each other turn red
+            <select id="conflict">
+              <option value="">keep as it is</option><option value="1">on</option><option value="0">off</option>
+            </select>
+          </label>
+          <label>Planes to follow
+            <input id="watch" type="text" maxlength="99" autocomplete="off" spellcheck="false"
+                   placeholder="EZY12AB, G-EUPT, 4CA7B4 or none">
+          </label>
+          <label>The LED (2.8" and 3.5" CYD, ES3C28P, NM-CYD-C5)
+            <select id="led">
+              <option value="">keep as it is</option><option value="15">watched planes and emergencies</option>
+              <option value="31">those, and any plane near</option><option value="47">those, and no data</option>
+              <option value="63">all of them</option><option value="1">emergencies only</option>
+              <option value="0">off</option>
+            </select>
+          </label>
+          <label>LED: how near is near
+            <select id="led_near">
+              <option value="">keep as it is</option><option value="1">1 km (or NM, or mile)</option>
+              <option value="2">2</option><option value="5">5</option><option value="10">10</option>
+            </select>
+          </label>
+          <label>LED brightness
+            <select id="led_level">
+              <option value="">keep as it is</option><option value="0">low, for the night</option>
+              <option value="1">mid</option><option value="2">high</option>
+            </select>
+          </label>
+          <label>LED lit
+            <select id="led_hold">
+              <option value="">keep as it is</option><option value="0">till the screen is touched, a minute at most</option>
+              <option value="1">10 seconds</option><option value="2">while it lasts</option>
+            </select>
+          </label>
+          <label>LED: the red one's pin (the CYDs only)
+            <select id="led_red">
+              <option value="">keep as it is</option><option value="4">GPIO 4: most CYD boards</option>
+              <option value="22">GPIO 22: LCDWIKI and Elegoo ESP32-32E boards</option>
+            </select>
+          </label>
+        </div>
+        <p class="note">Planes to follow: up to 8 callsigns, registrations (with their dash) or hex addresses. The
+          board says when one comes in range and picks it, and when one takes off or lands anywhere: it asks the free
+          networks about one of them every 15 seconds. Left empty, the board keeps its list; <b>none</b> empties it.</p>
+        <p class="note">The LED: red blinking fast for an emergency squawk round home, green when a watched plane comes in
+          range, blue when one takes off, cyan when one lands, white for any plane in the air near home, amber for no
+          data. Each one on or off, and the test, are on the board: SET, the LED tab. No red in the test: the board
+          is one whose red is on the other pin, change it here or with RED ON in the same tab.</p>
+        <p class="note">Optional. Boards with touch change these on the screen itself (the look's button over
+          the scope, and SET). The 3.5" RPi LCD has no touch: set them here. The map comes from
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>: the board
+          downloads the few pictures of it round home that the scope shows and keeps them in its flash, so a range it
+          has shown once comes back at once, even without WiFi.</p>
+      </fieldset>
+
+      <div class="actions">
+        <button id="send" type="submit" class="btn">SEND TO THE BOARD</button>
+        <button id="read" type="button" class="btn quiet">READ WHAT IT HAS</button>
+      </div>
+      <p class="note" style="grid-column:1/-1;margin:0">The password and the key go from this page into the board over
+        the USB cable and nowhere else. The page keeps nothing. The board never shows them and never sends them back:
+        it only says whether a key is stored. You can change the screen's own settings later on the board itself.</p>
+      <ul id="status"></ul>
+      <details>
+        <summary>What the board says</summary>
+        <pre id="log"></pre>
+      </details>
+    </form>
+  </div>
+
+  <h2 class="step">3 <span>/</span> ON THE SCREEN: WHERE TO TAP</h2>
+  <p class="lead">The pictures are the 3.5" board, the 2.8" one has the same screens a little smaller. Tap a
+    picture to see it full size.</p>
+  <div class="box how">
+    <figure>
+      <a href="shots/guide/radar.png" target="_blank"><img src="shots/guide/radar.png" loading="lazy"
+         alt="the radar look with arrows: drag the rim, tap a plane, drag inside, the look button, the list of the nearest, HUE, LIST and SET"></a>
+      <figcaption>
+        <h3>THE RADAR</h3>
+        <ul>
+          <li><b>Tap a plane</b> for its details in the panel. A row of the panel's list picks the same plane.</li>
+          <li><b>Drag the rim</b> to turn the map: match it to the way the screen stands. Back near north it snaps to north up.</li>
+          <li><b>Drag inside</b> to zoom: away from home in, toward home out. BOOT steps through 5, 10, 25, 50, 100 and 200.</li>
+          <li><b>The look</b>, top right, goes round RADAR, MAP and CLASSIC: the beam over the map, a square map north up, the same map in its own colours.</li>
+          <li><b>HUE</b> changes the colours, <b>LIST</b> shows every flight, <b>SET</b> has the settings.</li>
+          <li><b>Colour is height</b>: grey on the ground, warm under 10 000 ft, the theme's colour up to 25 000, white above. Emergency squawks blink.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/plane.png" target="_blank"><img src="shots/guide/plane.png" loading="lazy"
+         alt="a plane picked: its details in the panel, the line ahead of it, NEXT and X"></a>
+      <figcaption>
+        <h3>A PLANE PICKED</h3>
+        <ul>
+          <li>The panel says its callsign, type and registration, height, speed and track, how far it is and which way, its squawk.</li>
+          <li>The line ahead of it is where it will be in a minute.</li>
+          <li><b>NEXT</b> picks the next nearest one, <b>X</b> lets it go.</li>
+          <li><b>WATCH</b> puts it on the watch list by its registration (lit while it is on it), again takes it off.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/map.png" target="_blank"><img src="shots/guide/map.png" loading="lazy"
+         alt="the map look with arrows: where home is, the grid, home, drag to zoom, the look, the three dots, the scale"></a>
+      <figcaption>
+        <h3>THE MAP</h3>
+        <ul>
+          <li>MAP is a map over the whole screen, north up, home in the middle. CLASSIC is the same map in OpenStreetMap's own colours.</li>
+          <li>The grid's lines are whole degrees or minutes, named at the edges. The scale is in the corner.</li>
+          <li><b>The three dots</b> slide the panel in and out. A picked plane brings it by itself.</li>
+          <li><b>Drag</b> anywhere on the map to zoom.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/list.png" target="_blank"><img src="shots/guide/list.png" loading="lazy"
+         alt="the list of flights with arrows: tap a row, drag to scroll, ZOOM and BACK"></a>
+      <figcaption>
+        <h3>LIST</h3>
+        <ul>
+          <li>Every flight in range, the nearest first: its type, height, speed, how far and which way. Drag to scroll.</li>
+          <li><b>Tap a row</b> and that plane is picked on the scope. <b>ZOOM</b> steps the range, <b>BACK</b> goes back.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/setup.png" target="_blank"><img src="shots/guide/setup.png" loading="lazy"
+         alt="the settings page with arrows: minus and plus, tap to change, drag to scroll, the tabs VIEW DATA LED, BACK"></a>
+      <figcaption>
+        <h3>SET</h3>
+        <ul>
+          <li>Tabs on the bar. <b>VIEW</b>: the range, units, map up, the screen upside down, labels, colours, the look,
+              the map, the touch alignment. <b>DATA</b>: planes on the ground shown or hidden, the watch list, where the
+              planes come from, home, the WiFi, ABOUT. <b>RADAR</b>, also the gear under the scope: the radar look's options, all off
+              at first. LOWEST and HIGHEST, DATA BLOCK, AUTOPILOT, VECTORS, BEAM STEPS, CLOCK, LOST PLANES, CONFLICT. <b>LED</b> (2.8" and 3.5" CYD, ES3C28P, NM-CYD-C5): what lights the LED, how near
+              is near, how bright, for how long, TEST shows its red, green and blue, and on the CYDs RED ON picks the red one's pin.</li>
+          <li><b>Tap a button</b> to change it, <b>minus and plus</b> for numbers. Drag to see the rest.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/demo.png" target="_blank"><img src="shots/guide/demo.png" loading="lazy"
+         alt="the demo sky: DEMO in big letters, no WiFi yet, the SET UP WIFI button"></a>
+      <figcaption>
+        <h3>NO WIFI YET: THE DEMO</h3>
+        <ul>
+          <li>Without WiFi the board flies a made-up sky and says <b>DEMO</b> in big letters. Under it why: no WiFi set up yet,
+              the one set can't be seen, or its password looks wrong.</li>
+          <li><b>SET UP WIFI</b> opens the networks. The same is in SET, the WIFI row.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/wifi.png" target="_blank"><img src="shots/guide/wifi.png" loading="lazy"
+         alt="the WiFi networks the board hears, with arrows: signal, tap your network, the one in use, open, lock, LOOK AGAIN, BACK"></a>
+      <figcaption>
+        <h3>THE NETWORKS</h3>
+        <ul>
+          <li>The networks the board hears, the strongest first. A lock asks for a password, OPEN does not, SET is the one in use.</li>
+          <li><b>Tap your network</b>. <b>LOOK AGAIN</b> looks round once more. The ESP32 hears 2.4 GHz networks only.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/keys.png" target="_blank"><img src="shots/guide/keys.png" loading="lazy"
+         alt="the keyboard for the WiFi password, with arrows: the network, the password, ABC, #+=, DEL, SHOW, CANCEL, JOIN"></a>
+      <figcaption>
+        <h3>THE PASSWORD</h3>
+        <ul>
+          <li>Dots for what you typed, the last letter shows for a moment. <b>SHOW</b> shows all of it.</li>
+          <li><b>ABC</b> gives one capital, <b>#+=</b> the signs, <b>DEL</b> rubs out, held it goes on.</li>
+          <li><b>JOIN</b>: the board joins the network and the real planes come in a few seconds. The password goes into the board and stays there.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/home.png" target="_blank"><img src="shots/guide/home.png" loading="lazy"
+         alt="the keyboard for a new home, with arrows: what it takes, a town, a postcode or lat lon, ABC, #+= for the space, CANCEL, FIND"></a>
+      <figcaption>
+        <h3>HOME</h3>
+        <ul>
+          <li>SET, the HOME row, <b>CHANGE</b>: type a town, a postcode, or the point as 48.9 18.1. <b>FIND</b> asks
+              OpenStreetMap where it is, a point needs no WiFi. The planes come round the new home at once.</li>
+          <li>A postcode is looked for first in the country of the home the board has, then anywhere. One from another
+              country goes with its name: 10115, Germany. OpenStreetMap does not know every full postcode, the town's name always works.</li>
+          <li><b>#+=</b> has the space. The round board and the RPi LCD take their home from step 2.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/watch.png" target="_blank"><img src="shots/guide/watch.png" loading="lazy"
+         alt="the keyboard for the planes to follow, with arrows: what it takes, the planes by commas, #+= for the comma and the dash, CANCEL, SAVE"></a>
+      <figcaption>
+        <h3>WATCH</h3>
+        <ul>
+          <li>SET, DATA, the WATCH row, or WATCH on a picked plane's panel: up to 8 planes, by commas. A callsign as the plane sends it (EZY12AB, BAW123, not the
+              flight number on a ticket), a registration with its dash (G-EUPT), or the hex address (4CA7B4). Letters come
+              out as capitals by themselves, <b>#+=</b> has the comma and the dash.</li>
+          <li>One comes in range: <b>EZY12AB IN RANGE</b>, and the board picks it on the scope. The others it asks the free
+              networks about, one every 15 seconds: <b>IS FLYING</b> when one takes off anywhere, <b>LANDED</b> when it is down.</li>
+          <li>The round board and the RPi LCD take their list from step 2.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/news.png" target="_blank"><img src="shots/guide/news.png" loading="lazy"
+         alt="the radar with a note in the panel's title: NEW VERSION, tap for ABOUT"></a>
+      <figcaption>
+        <h3>A NEW VERSION</h3>
+        <ul>
+          <li>A board on WiFi asks this page twice a day which version it has. When it is newer, a small
+              <b>NEW VERSION</b> note shows: in the panel's title over the radar, under the town's card over the map, under
+              home on the round glass. A tap on it opens ABOUT. Nothing else changes, the board goes on as it was.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/about.png" target="_blank"><img src="shots/guide/about.png" loading="lazy"
+         alt="ABOUT with arrows: this version, what the site has, how to update, the code to scan for the site, its address, BACK"></a>
+      <figcaption>
+        <h3>ABOUT</h3>
+        <ul>
+          <li>SET, DATA, the ABOUT row, or the note: the version the board runs, the one this page has, the board, whether
+              an FR24 key is stored.</li>
+          <li><b>Scan the code</b> with a phone for this page, or type the address under it. To update, open it on a
+              computer, <b>CONNECT &amp; FLASH</b> and no to erase: the settings stay.</li>
+          <li>The history of the versions is at the end of this page.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/screen.png" target="_blank"><img class="narrow" src="shots/guide/screen.png" loading="lazy"
+         alt="the 2.8 inch board in its first seconds: a card says SCREEN WRONG? PRESS BOOT"></a>
+      <figcaption>
+        <h3>THE 2.8" CYD: WHICH SCREEN</h3>
+        <ul>
+          <li>It is sold with three different screens and starts as v2, the one most boards have. Wrong colours or a
+              mirrored picture: press <b>BOOT</b>, the small button on the board, within 8 seconds after power on, again
+              till it looks right: v2, v1, v3. It keeps that one. <a href="#boot">More under the boards in step 1.</a></li>
+        </ul>
+      </figcaption>
+    </figure>
+    <figure>
+      <a href="shots/guide/round.png" target="_blank"><img class="narrow" src="shots/guide/round.png" loading="lazy"
+         alt="the round glass with arrows: tap an empty spot for the menu, HUE, the look, LIST and SET, drag the rim, tap a plane"></a>
+      <figcaption>
+        <h3>THE ROUND GLASS</h3>
+        <ul>
+          <li>The whole glass is the scope. <b>Tap an empty spot</b> for HUE, the look, LIST and SET.</li>
+          <li><b>Tap a plane</b> for its card under home, tap the card for the next one.</li>
+          <li>The rim turns the map and inside zooms, like on the square boards. Its WiFi comes from this page, step 2.</li>
+        </ul>
+      </figcaption>
+    </figure>
+    <ul>
+      <li><b>Hold BOOT</b> to go back to the scope from any page.</li>
+      <li><b>Hold a finger 4 s</b> on an empty spot to align the touch again.</li>
+      <li><b>The RPi LCD</b> has no touch: BOOT steps through the planes, held it changes the range. The rest comes from step 2.</li>
+    </ul>
+  </div>
+
+  <h2 class="step" id="versions">VERSIONS</h2>
+  <div class="box changes" id="changes">
+    <p>What changed in each version, the newest first: <a href="CHANGES.md">CHANGES.md</a>.</p>
+  </div>
+
+  <footer>
+    Firmware @VERSION@, built by GitHub Actions from
+    <a href="https://github.com/KirinDenis/OWLOS-FLIGHT-RADAR">github.com/KirinDenis/OWLOS-FLIGHT-RADAR</a>,
+    where the code and the README are. MIT licensed. Flashing is done by
+    <a href="https://esphome.github.io/esp-web-tools/">ESP Web Tools</a>. Plane data:
+    <a href="https://adsb.lol/">adsb.lol</a> (ODbL) and <a href="https://adsb.fi/">adsb.fi</a>, or Flightradar24
+    with your own key. The map and the town names: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors (ODbL).
+  </footer>
+</div>
+
+<script type="module">
+/* step 2: the settings go to the board over Web Serial, one line each way (firmware/main/console.h):
+ *   page  OWLOS HELLO            board  OWLOS READY flight-radar <version>
+ *   page  OWLOS SET {...}        board  OWLOS OK  or  OWLOS ERR <why>
+ *   page  OWLOS GET              board  OWLOS CFG {...}   (no password, no key: only whether one is stored)
+ * the board's log comes on the same line; the page reads it after SET to say whether the WiFi came up */
+const $ = id => document.getElementById(id);
+const utf8 = new TextEncoder();
+const bytes = s => utf8.encode(s).length;
+
+$('show').onclick = () => {
+  const p = $('pass');
+  p.type = p.type === 'password' ? 'text' : 'password';
+  $('show').textContent = p.type === 'password' ? 'SHOW' : 'HIDE';
+};
+for (const r of document.querySelectorAll('input[name=src]'))
+  r.onchange = () => { $('keyrow').hidden = source() !== 'fr24'; };
+function source() { return document.querySelector('input[name=src]:checked').value; }
+
+// FIND and USE MY LOCATION answer under the home's fields
+function near(text, kind) {
+  $('found').textContent = text;
+  $('found').className = 'found ' + (kind || '');
+}
+
+$('locate').onclick = () => {
+  if (!navigator.geolocation) { near('This browser can\'t tell where you are: type the numbers in.', 'bad'); return; }
+  near('Asking the browser where you are...', 'wait');
+  navigator.geolocation.getCurrentPosition(
+    p => {
+      $('lat').value = p.coords.latitude.toFixed(4);
+      $('lon').value = p.coords.longitude.toFixed(4);
+      near('Home set from the browser\'s location.', 'ok');
+      if (!$('place').value || named) lookup();      // a name we found before is replaced, one you typed is not
+    },
+    e => near('No location: ' + (e.code === 1 ? 'the browser was not allowed to say.' : 'it could not find out.') + ' Type the numbers in.', 'bad'),
+    { timeout: 15000, maximumAge: 600000 });
+};
+
+// the first characters of s that fit in n bytes of UTF-8: the board keeps 39 of a town, 31 of a country
+function clip(s, n) {
+  let out = '';
+  for (const ch of s) { if (bytes(out + ch) > n) break; out += ch; }
+  return out;
+}
+
+/* FIND, from OpenStreetMap's Nominatim, in English: the board's font is Latin first. a town you
+ * typed is looked up for its point, as the board's own FIND does; with none typed, the nearest town
+ * to the numbers is named, asked with the point rounded to 0.01 degree (like the board asks the
+ * plane network) */
+let named = false;
+const town_of = a => a.city || a.town || a.village || a.municipality || a.hamlet || a.county || a.state || '';
+async function lookup() {
+  const typed = named ? '' : $('place').value.trim();
+  if (typed) {
+    await search(typed);
+    return;
+  }
+  const lat = parseFloat($('lat').value), lon = parseFloat($('lon').value);
+  if (!(lat >= -90 && lat <= 90) || !(lon >= -180 && lon <= 180)) { near('Type a town, or the latitude and longitude.', 'bad'); return; }
+  const u = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=en&lat=' +
+            lat.toFixed(2) + '&lon=' + lon.toFixed(2);
+  near('Asking OpenStreetMap for the nearest town...', 'wait');
+  try {
+    const j = await (await fetch(u)).json();
+    const a = j.address || {};
+    const name = town_of(a);
+    if (!name && !a.country) { near('OpenStreetMap knows no town there: type a name if you want one.', 'wait'); return; }
+    $('place').value = clip(name, 39);
+    $('country').value = clip(a.country || '', 31);
+    named = true;
+    near('Named it ' + [$('place').value, $('country').value].filter(Boolean).join(', ') + ' (OpenStreetMap).', 'ok');
+  } catch (e) {
+    near('OpenStreetMap did not answer: type a name if you want one.', 'wait');
+  }
+}
+
+/* a postcode is the same number in many countries (10115 alone is Santo Domingo): one with a digit
+ * in it is looked for in the country's field first, then anywhere. a town is looked for as it is */
+async function search(text) {
+  near('Looking for ' + text + ' on OpenStreetMap...', 'wait');
+  const ask = async q => (await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1' +
+                                      '&accept-language=en&q=' + encodeURIComponent(q))).json();
+  try {
+    let found = [];
+    const land = $('country').value.trim();
+    if (/[0-9]/.test(text) && land) {
+      found = await ask(text + ', ' + land);
+      if (!found.length) {
+        await new Promise(r => setTimeout(r, 1100));   // Nominatim takes a request a second
+      }
+    }
+    if (!found.length) {
+      found = await ask(text);
+    }
+    if (!found.length) { near('OpenStreetMap does not know ' + text + ': try another spelling, or type the numbers in.', 'bad'); return; }
+    const f = found[0], a = f.address || {};
+    $('lat').value = (+f.lat).toFixed(4);
+    $('lon').value = (+f.lon).toFixed(4);
+    $('place').value = clip(town_of(a) || f.name || text, 39);
+    $('country').value = clip(a.country || '', 31);
+    named = true;
+    near('Found ' + [$('place').value, $('country').value].filter(Boolean).join(', ') + ' at ' +
+         $('lat').value + ' ' + $('lon').value + ' (OpenStreetMap).', 'ok');
+  } catch (e) {
+    near('OpenStreetMap did not answer: try again, or type the numbers in.', 'bad');
+  }
+}
+$('lookup').onclick = lookup;
+$('place').oninput = $('country').oninput = () => { named = false; };
+
+/* --- messages --- */
+function say(text, kind) {
+  const li = document.createElement('li');
+  li.textContent = text;
+  if (kind) li.className = kind;
+  $('status').append(li);
+  return li;
+}
+function clear() { $('status').replaceChildren(); $('log').textContent = ''; }
+function log(line) {
+  const l = $('log');
+  l.textContent += line + '\n';
+  l.scrollTop = l.scrollHeight;
+}
+
+/* --- the form --- */
+function settings() {
+  const s = { src: source() };
+  // the WiFi and the home are left out when left empty: the board keeps what it has (a WiFi set on
+  // its own screen, Trenčín till a home comes)
+  const ssid = $('ssid').value, pass = $('pass').value;
+  if (ssid || pass) {
+    if (!ssid) throw 'Type the WiFi network name, or leave the password empty too.';
+    if (bytes(ssid) > 32) throw 'The network name is longer than 32 bytes.';
+    if (pass && (pass.length < 8 || bytes(pass) > 63)) throw 'A WiFi password is 8 to 63 characters.';
+    s.ssid = ssid;
+    s.pass = pass;
+  }
+  if ($('lat').value.trim() || $('lon').value.trim()) {
+    const lat = parseFloat($('lat').value), lon = parseFloat($('lon').value);
+    if (!(lat >= -90 && lat <= 90) || !(lon >= -180 && lon <= 180)) throw 'Type both the latitude and the longitude, or press USE MY LOCATION.';
+    s.lat = Math.round(lat * 1e5) / 1e5;
+    s.lon = Math.round(lon * 1e5) / 1e5;
+  }
+  // town and country left empty: not sent, the board asks OpenStreetMap for them
+  const place = $('place').value.trim(), country = $('country').value.trim();
+  if (bytes(place) > 39) throw 'The town\'s name is longer than 39 bytes.';
+  if (bytes(country) > 31) throw 'The country\'s name is longer than 31 bytes.';
+  if (place) s.place = place;
+  if (country) s.country = country;
+  if (s.src === 'fr24') {
+    s.key = $('key').value.trim();
+    if (!s.key) throw 'Flightradar24 needs its key. Or pick the free networks.';
+  }
+  for (const k of ['up', 'flip', 'theme', 'look', 'map', 'ground', 'vectors', 'beam_step', 'clock', 'block', 'autopilot',
+                   'lost', 'conflict', 'fl_lo', 'fl_hi', 'led', 'led_level', 'led_hold', 'led_near', 'led_red']) if ($(k).value !== '') s[k] = +$(k).value;   // left out: the board keeps its own
+  if (s.led_red) s.led_test = 1;                     // the red one moved: show it
+  const watch = $('watch').value.trim();
+  if (watch) s.watch = /^none$/i.test(watch) ? '' : watch;
+  return s;
+}
+
+/* --- the versions: version.json is what the boards ask for, CHANGES.md the history. the workflow
+ * puts both next to the page, from the one CHANGES.md whose first "## " line is the version --- */
+let newest = '';
+
+function vcmp(a, b) {                                // 0.9 < 0.10: number by number
+  const x = String(a).split('.').map(n => parseInt(n, 10) || 0), y = String(b).split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] || 0) - (y[i] || 0);
+    if (d) {
+      return d;
+    }
+  }
+  return 0;
+}
+
+// CHANGES.md as the page shows it: a heading a version, its points under it. text only, nothing
+// from the file goes in as HTML
+function changes(md) {
+  const out = [];
+  let list = null, item = null;
+  for (const line of md.split(/\r?\n/)) {
+    const h = line.match(/^## (\S+)/);
+    if (h) {
+      const h3 = document.createElement('h3');
+      h3.textContent = h[1];
+      if (!out.length) {
+        const s = document.createElement('span');
+        s.textContent = ', the newest';
+        h3.append(s);
+      }
+      list = document.createElement('ul');
+      out.push(h3, list);
+      item = null;
+    } else if (list && /^- /.test(line)) {
+      item = document.createElement('li');
+      item.textContent = line.slice(2);
+      list.append(item);
+    } else if (item && /^\s+\S/.test(line)) {        // a point goes on over the next lines
+      item.textContent += ' ' + line.trim();
+    }
+  }
+  if (out.length) {
+    $('changes').replaceChildren(...out);
+  }
+}
+
+fetch('version.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).then(j => {
+  if (j && /^[0-9]+(\.[0-9]+)*$/.test(j.version)) {
+    newest = j.version;
+    if ($('newest').textContent.includes('@')) {     // not built by the workflow: no build number to show
+      $('newest').textContent = newest;
+    }
+  }
+}).catch(() => {});
+fetch('CHANGES.md', { cache: 'no-cache' }).then(r => r.ok ? r.text() : null).then(t => {
+  if (t) {
+    changes(t);
+  }
+}).catch(() => {});
+
+/* --- an older version: fw/versions.json lists each one the site keeps, the newest first, the newest
+ * in fw/ and the older ones in fw/<version>/ (.github/archive.sh). picking one points every board's
+ * button at that version's manifest, a board that came later says so instead. ?v=0.3 picks one
+ * from a link --- */
+const flashers = [...document.querySelectorAll('esp-web-install-button')].map(b => {
+  const m = (b.getAttribute('manifest') || '').match(/^fw\/([^/]+)\/manifest\.json$/);
+  const later = document.createElement('p');
+  later.className = 'nope flash';
+  later.hidden = true;
+  b.after(later);
+  return { b, board: m ? m[1] : '', later };
+});
+
+function pickVersion(all, i) {
+  const v = all[i];
+  for (const f of flashers) {
+    if (!f.board) {
+      continue;
+    }
+    const has = v.boards.includes(f.board);
+    f.b.setAttribute('manifest', v.dir + '/' + f.board + '/manifest.json');
+    f.b.hidden = !has;
+    f.later.hidden = has;
+    f.later.textContent = has ? '' : 'Not in ' + v.version + ': this board came in a later version.';
+  }
+  const note = $('older-note');
+  note.hidden = i === 0;
+  if (i === 0) {
+    note.replaceChildren();
+    return;
+  }
+  const group = document.createElement('a');
+  group.href = 'https://www.facebook.com/groups/OWLOS';
+  group.textContent = 'our group';
+  note.replaceChildren(v.version + ' is an older version, for a board the newest went wrong on: tell us what went wrong in ',
+    group, '. An older version may not read all the settings a newer one saved: the WiFi stays, the rest may need step 2 again.');
+}
+
+fetch('fw/versions.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).then(j => {
+  const all = j && Array.isArray(j.versions) ? j.versions.filter(v => v && /^[0-9]+(\.[0-9]+)*$/.test(v.version) &&
+    /^fw(\/[0-9.]+)?$/.test(v.dir) && Array.isArray(v.boards)) : [];
+  if (all.length < 2) {
+    return;
+  }
+  const pick = $('pick');
+  all.forEach((v, i) => {
+    const o = document.createElement('option');
+    o.value = String(i);
+    o.textContent = v.version + (i === 0 ? ', the newest' : '');
+    pick.append(o);
+  });
+  pick.addEventListener('change', () => pickVersion(all, Number(pick.value)));
+  $('older').hidden = false;
+  const asked = all.findIndex(v => v.version === new URLSearchParams(location.search).get('v'));
+  if (asked > 0) {
+    pick.value = String(asked);
+    pickVersion(all, asked);
+  }
+}).catch(() => {});
+
+/* --- the board on the serial port --- */
+class Board {
+  async open() {
+    this.port = await navigator.serial.requestPort();
+    await this.port.open({ baudRate: 115200 });
+    // both lines released: the board runs (on the CYD this may restart it, it then says READY anyway)
+    await this.port.setSignals({ dataTerminalReady: false, requestToSend: false });
+    this.lines = [];
+    this.text = '';
+    this.reader = this.port.readable.getReader();
+    this.pumping = this.pump();
+  }
+  async pump() {
+    const dec = new TextDecoder();
+    try {
+      for (;;) {
+        const { value, done } = await this.reader.read();
+        if (done) break;
+        this.text += dec.decode(value, { stream: true });
+        let i;
+        while ((i = this.text.indexOf('\n')) >= 0) {
+          const line = this.text.slice(0, i).replace(/\r$/, '').replace(/\x1b\[[0-9;]*m/g, '');
+          this.text = this.text.slice(i + 1);
+          if (line.startsWith('OWLOS ')) this.lines.push(line);
+          else if (line.trim()) { log(line); this.onlog?.(line); }
+        }
+      }
+    } catch (e) { /* the port went away: close() says so */ }
+  }
+  // a newline first: bytes garbled while the board restarts at connect would otherwise glue onto
+  // the command, and the board takes only a line that starts with OWLOS. it skips empty lines
+  async send(line) {
+    const w = this.port.writable.getWriter();
+    await w.write(utf8.encode('\n' + line + '\n'));
+    w.releaseLock();
+  }
+  // the first line starting with one of the prefixes, or null after ms
+  async expect(prefixes, ms) {
+    const until = Date.now() + ms;
+    while (Date.now() < until) {
+      const i = this.lines.findIndex(l => prefixes.some(p => l.startsWith(p)));
+      if (i >= 0) return this.lines.splice(i, 1)[0];
+      await new Promise(r => setTimeout(r, 60));
+    }
+    return null;
+  }
+  async close() {
+    try { await this.reader.cancel(); await this.pumping; this.reader.releaseLock(); } catch (e) { }
+    try { await this.port.close(); } catch (e) { }
+  }
+}
+
+async function connect() {
+  if (!('serial' in navigator)) throw 'This browser has no Web Serial. Use Chrome or Edge on a computer or a Chromebook.';
+  const b = new Board();
+  try { await b.open(); }
+  catch (e) {
+    if (e.name === 'NotFoundError') throw 'No port was picked.';
+    if (e.name === 'InvalidStateError' || e.name === 'NetworkError') throw 'The port is busy: close the flasher\'s window (or any serial monitor) and try again.';
+    throw 'Could not open the port: ' + e.message;
+  }
+  const hi = say('Looking for the Flight Radar on the board...', 'wait');
+  let ready = null;
+  for (let t = 0; t < 14 && !ready; t++) {        // a board that just restarted needs a second or two
+    await b.send('OWLOS HELLO');
+    ready = await b.expect(['OWLOS READY'], 800);
+  }
+  if (!ready || !ready.startsWith('OWLOS READY flight-radar')) {
+    hi.remove();
+    await b.close();
+    if (!ready) throw 'The board did not answer. Is the Flight Radar flashed on it (step 1)? Is it the right port?';
+    throw 'This board runs other OWLOS firmware (' + ready.slice(12) + '). Flash the Flight Radar first, step 1.';
+  }
+  hi.textContent = 'Found the Flight Radar ' + ready.split(' ')[3] + '.';
+  hi.className = 'ok';
+  return b;
+}
+
+/* what the board remembers, each with a way to forget it. an older firmware says nothing of them */
+function showNets(names) {
+  const box = $('nets');
+  box.textContent = '';
+  if (!names || !names.length) {
+    return;
+  }
+  const head = document.createElement('p');
+  head.className = 'note';
+  head.textContent = 'On the board now:';
+  box.append(head);
+  for (const name of names) {
+    const row = document.createElement('div');
+    const label = document.createElement('span');
+    const forget = document.createElement('button');
+    label.textContent = name;
+    forget.type = 'button';
+    forget.className = 'btn quiet';
+    forget.textContent = 'FORGET';
+    forget.onclick = () => run(async keep => {
+      const b = keep(await connect());
+      await b.send('OWLOS SET ' + JSON.stringify({ forget: name }));
+      const r = await b.expect(['OWLOS OK', 'OWLOS ERR'], 5000);
+      if (!r) {
+        throw 'The board did not confirm.';
+      }
+      say('Forgotten: "' + name + '".', 'ok');
+      await show(b);
+    });
+    row.append(label, forget);
+    box.append(row);
+  }
+}
+
+async function show(b) {
+  await b.send('OWLOS GET');
+  const line = await b.expect(['OWLOS CFG '], 3000);
+  if (!line) { say('The board did not say what it has.', 'bad'); return null; }
+  const c = JSON.parse(line.slice(10));
+  showNets(c.nets);
+  say('On the board: network ' + (c.ssid ? '"' + c.ssid + '"' : 'not set') +
+      ', home ' + c.lat.toFixed(4) + ' ' + c.lon.toFixed(4) +
+      (c.place || c.country ? ' (' + [c.place, c.country].filter(Boolean).join(', ') + ')' : '') +
+      ', ' + (c.src === 'fr24' ? 'Flightradar24' : 'the free networks') +
+      ', Flightradar24 key ' + (c.key ? 'stored' : 'none') +
+      (c.watch ? ', following ' + c.watch : '') + '.', 'ok');
+  if (c.up !== undefined) {
+    const theme = ['Arctic', 'Phosphor', 'Amber', 'Crimson', 'Synth'][c.theme] || '?';
+    const look = ['radar', 'flat map', 'classic map'][c.look];
+    say('The screen: ' + (c.up ? c.up + '° up' : 'north up') + ', ' + (c.flip ? 'upside down' : 'the right way up') +
+        ', ' + theme + ' colours' + (look ? ', the ' + look + ' look, map ' + (c.map ? 'on' : 'off') : '') +
+        (c.ground === 0 ? ', planes on the ground hidden' : '') +
+        (['vectors', 'beam_step', 'clock', 'block', 'autopilot', 'lost', 'conflict'].some(k => c[k]) || c.fl_lo || c.fl_hi ? ', radar options on' : '') +
+        (c.led === 0 ? ', the LED off' : c.led ? ', the LED ' + (['low', 'mid', 'high'][c.led_level] || '?') +
+          (c.led_red ? ', its red on GPIO ' + c.led_red : '') : '') +
+        (c.screen >= 0 ? ', the 2.8" CYD\'s v' + (c.screen + 1) + ' screen' : '') + '.', 'ok');
+  }
+  // how long it runs, and how the run before ended: a board found standing still says here whether it
+  // started again by itself (and why), or the picture stood with the board running
+  if (c.uptime !== undefined) {
+    say('Running for ' + span(c.uptime) + ', started after: ' + c.reset +
+        (c.ran ? ', the run before lasted ' + span(c.ran) : '') + '.', 'ok');
+  }
+  if (c.version) {                                   // and whether this page has a newer one for it
+    if (newest && vcmp(newest, c.version) > 0) {
+      say('Firmware ' + c.version + ', this page has ' + newest + ': flash it in step 1, no to erase keeps these settings.', 'wait');
+    } else {
+      say('Firmware ' + c.version + (newest && vcmp(newest, c.version) === 0 ? ', the newest.' : '.'), 'ok');
+    }
+  }
+  return c;
+}
+
+function span(s) {
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+  return h ? h + ' h ' + m + ' min' : m ? m + ' min' : s + ' s';
+}
+
+// why the WiFi dropped, from ESP-IDF's reason codes, in words
+function wifi_why(code) {
+  if ([15, 202, 204].includes(code)) return 'the password looks wrong';
+  if ([201, 210, 211].includes(code)) return 'the network is not found: is it 2.4 GHz, and is the name exact?';
+  return 'reason ' + code;
+}
+
+// after SET: the board's log says whether the WiFi came up and how the first answer went
+async function watch(b) {
+  const w = say('Waiting for the board to join the WiFi...', 'wait');
+  return new Promise(done => {
+    let up = false, fails = 0;
+    const finish = (text, kind) => { b.onlog = null; clearTimeout(timer); w.textContent = text; w.className = kind; done(); };
+    const timer = setTimeout(() => finish(up ? 'On the WiFi, no answer from the plane network yet: look at the screen in a minute.'
+                                           : 'The board did not join the WiFi in 40 s. Check the name and the password.', up ? 'wait' : 'bad'), 40000);
+    b.onlog = line => {
+      let m;
+      if ((m = line.match(/WiFi up, ([\d.]+)(?:, network "(.*)")?/))) { up = true; w.textContent = 'On the WiFi' + (m[2] ? ' "' + m[2] + '"' : '') + ' as ' + m[1] + ', asking for the planes...'; }
+      else if ((m = line.match(/WiFi lost \(reason (\d+)\)/)) && !up && ++fails >= 3) finish('The board can\'t join the WiFi: ' + wifi_why(+m[1]) + '.', 'bad');
+      else if ((m = line.match(/: HTTP (\d+), \d+ bytes in \d+ ms, (\d+) planes in it/))) {
+        if (m[1] === '200') finish('Done. The board is online and the network sees ' + m[2] + ' planes around your home.', 'ok');
+        else if (m[1] === '401' || m[1] === '403') finish('Flightradar24 refused the key (HTTP ' + m[1] + ').', 'bad');
+        else w.textContent = 'The plane network answered HTTP ' + m[1] + ', the board keeps trying...';
+      }
+    };
+  });
+}
+
+let busy = false;
+async function run(job) {
+  if (busy) return;
+  busy = true;
+  $('send').disabled = $('read').disabled = true;
+  clear();
+  let b = null;
+  try { await job(c => (b = c)); }
+  catch (e) { say(typeof e === 'string' ? e : 'Something went wrong: ' + e.message, 'bad'); }
+  finally {
+    if (b) await b.close();
+    $('send').disabled = $('read').disabled = busy = false;
+  }
+}
+
+$('form').onsubmit = ev => {
+  ev.preventDefault();
+  run(async keep => {
+    const s = settings();
+    const b = keep(await connect());
+    await b.send('OWLOS SET ' + JSON.stringify(s));
+    const r = await b.expect(['OWLOS OK', 'OWLOS ERR'], 5000);
+    if (!r) throw 'The board did not confirm the settings.';
+    if (r.startsWith('OWLOS ERR')) throw 'The board refused: ' + r.slice(10);
+    say('Settings stored on the board.', 'ok');
+    await show(b);
+    if (s.ssid) await watch(b);                       // a new WiFi: say whether it came up
+  });
+};
+$('read').onclick = () => run(async keep => { await show(keep(await connect())); });
+</script>
+</body>
+</html>

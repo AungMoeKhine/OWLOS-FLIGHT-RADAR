@@ -101,6 +101,21 @@ void store_save_secrets(const secrets_t *s)
     nvs_close(h);
 }
 
+/* the first network stays in "ssid" and "pass", where every version looks for it: a board that
+ * goes back to an older one keeps its WiFi. the others are one blob, the empty places in it too */
+void store_load_nets(const secrets_t *s, nets_t *l)
+{
+    memset(l, 0, sizeof *l);
+    if (!s->ssid[0]) return;
+    memcpy(l->n[0].ssid, s->ssid, sizeof l->n[0].ssid);
+    memcpy(l->n[0].pass, s->pass, sizeof l->n[0].pass);
+    load_blob(NS, "nets", &l->n[1], sizeof l->n - sizeof l->n[0]);
+    l->count = 1;
+    while (l->count < NETS_KEPT && l->n[l->count].ssid[0]) l->count++;
+}
+
+void store_save_nets(const nets_t *l) { save_blob("nets", &l->n[1], sizeof l->n - sizeof l->n[0]); }
+
 /* a board that ran the WiFi radar or the thermostat already knows its touch: same chip, same
  * panel. so without an alignment of its own it takes theirs */
 int store_load_cal(touch_cal_t *cal)

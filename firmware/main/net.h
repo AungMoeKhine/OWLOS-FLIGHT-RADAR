@@ -6,10 +6,11 @@
 // how the board names itself to every server: OSM asks for a name it can tell apart
 #define NET_USER_AGENT "OWLOS-Flight-Radar/" FLIGHT_VERSION " (+https://github.com/KirinDenis/OWLOS-FLIGHT-RADAR)"
 
-void net_start(const secrets_t *s);          // nothing happens without an SSID
-void net_reconnect(const secrets_t *s);      // new WiFi settings, from the site or the screen
+void net_start(const nets_t *l);             // nothing happens without a network
+void net_reconnect(const nets_t *l);         // new WiFi settings, from the site or the screen: the first one first
 int  net_up(void);                           // 1 = connected, has an address
-int  net_why(void);                          // WHY_*: the network set is not up because
+int  net_why(void);                          // WHY_*: the network it is trying is not up because
+void net_ssid(char *buf, int cap);           // the network it is on, or is trying
 void net_ip(char *buf, int cap);
 /* the time, for the radar's clock. nothing asks a time server until the clock is turned on */
 void     net_time_start(void);               // again does nothing: it keeps itself right from then on

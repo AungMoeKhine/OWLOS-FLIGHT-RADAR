@@ -59,7 +59,7 @@ void wifi_draw(ui_t *u, canvas_t *cv)
             signal_bars(&lc, 12, y + (NET_H - 14) / 2, a->rssi, now ? C_FOCUS : C_PRIM);
             const int tx = 40, ty = y + (NET_H - FONT_LINE_H(&FONT_MEDIUM)) / 2;
             font_text_clip(&lc, &FONT_MEDIUM, tx, ty, a->ssid, now ? C_FOCUS : C_PRIM, 255, GFX_W - tx - 90);
-            const char *tag = now ? (u->net.wifi ? "JOINED" : "SET") : a->open ? "OPEN" : NULL;
+            const char *tag = now ? (u->net.wifi ? "JOINED" : "SET") : a->kept ? "SAVED" : a->open ? "OPEN" : NULL;
             int rx = GFX_W - 14;
             if (!a->open) {
                 lock_mark(&lc, rx - 10, y + (NET_H - 12) / 2, C_DIM);
@@ -88,7 +88,8 @@ void wifi_act(ui_t *u, int hit, ui_cmd_t *cmd)
     const ap_t *a = &u->net.aps[k];
     snprintf(u->wifi_ssid, sizeof u->wifi_ssid, "%s", a->ssid);
     memset(u->wifi_pass, 0, sizeof u->wifi_pass);
-    if (a->open) {                                     // nothing to type: join it
+    int now = u->net.configured && !strcmp(a->ssid, u->net.ssid);
+    if (a->open || (a->kept && !now)) {                // nothing to type: join it. the one in use: a new password
         cmd->wifi = 1;
         u->view = VIEW_MAIN;
         toast(u, "JOINING THE WIFI");

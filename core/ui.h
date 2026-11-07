@@ -69,6 +69,7 @@ typedef struct {
     char    ssid[33];
     int8_t  rssi;          /* dBm */
     uint8_t open;          /* no password */
+    uint8_t kept;          /* the board remembers it: a tap joins it */
 } ap_t;
 
 #define UI_APS 16
@@ -81,7 +82,7 @@ typedef struct {
     uint8_t  wifi;         /* connected */
     uint8_t  has_key;      /* an FR24 key is stored */
     uint8_t  demo;         /* no WiFi set, or it is not there: the demo sky is up */
-    char     ssid[33];
+    char     ssid[33];     /* the one it is on or is trying, of those it remembers */
     char     ip[16];
     char     server[24];   /* who answered last */
     int      http;         /* last HTTP status, 0 none */

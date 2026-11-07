@@ -1,4 +1,5 @@
 #pragma once
+#include "nets.h"
 #include "ui.h"
 
 /* kept in NVS: what the screen shows (fr_cfg_t), the secrets the site sent, the touch alignment
@@ -13,6 +14,9 @@ int  store_load_cfg(fr_cfg_t *c);              // 1 if there was a saved one
 void store_save_cfg(const fr_cfg_t *c);
 void store_load_secrets(secrets_t *s);         // empty strings where nothing is saved
 void store_save_secrets(const secrets_t *s);
+/* the networks it remembers: the first is the one in the secrets, the others are kept here */
+void store_load_nets(const secrets_t *s, nets_t *l);
+void store_save_nets(const nets_t *l);
 int  store_load_cal(touch_cal_t *cal);
 void store_save_cal(const touch_cal_t *cal);
 int  store_load_screen(void);                  // -1: never picked
