@@ -329,7 +329,7 @@ function barState() {
   }
   const waits = here().find((u) => u.aligning);
   if (waits) {
-    text += ` / ${esc(waits.name.toUpperCase())}: TOUCH THE CROSSES ON ITS SCREEN <button class="baract" data-skip="${waits.mac}">SKIP</button>`;
+    text += ` <button class="baract" data-skip="${waits.mac}">${esc(waits.name.toUpperCase())}: SKIP THE CROSSES</button>`;
   }
   return text;
 }
@@ -385,8 +385,40 @@ function planesFrom(u) {
   }
 }
 
+/* what the window of a board says: is it on the cable, on the WiFi, does the plane network answer */
+const STALE_MS = 60000;
+
+function unitState(u) {
+  if (!u.online) {
+    return ['bad', 'NOT CONNECTED'];
+  }
+  if (u.aligning) {
+    return ['warn', 'TOUCH THE CROSSES'];
+  }
+  if (!u.wifi) {
+    return ['warn', 'NO WIFI'];
+  }
+  if (u.server === 'DEMO') {
+    return ['warn', 'WIFI SET, NOT JOINED: DEMO'];
+  }
+  if (!u.heard || Date.now() - u.heard > STALE_MS) {
+    return ['warn', 'WIFI, NO ANSWER FROM THE PLANES YET'];
+  }
+  return ['good', `WIFI / ${u.server} / ${u.planes} PLANES`];
+}
+
+function showStates() {
+  for (const u of app.units) {
+    const w = desk.get(u.mac);
+    if (w) {
+      w.setState(...unitState(u));
+    }
+  }
+}
+
 function renderBar() {
   pickSky();
+  showStates();
   const chips = [];
   if (app.units.length > 1) {
     chips.push(`<button class="uchip" data-all aria-pressed="${app.view === 'all'}">ALL</button>`);
@@ -632,6 +664,8 @@ async function attach(link, port, who) {
     } else if (line.startsWith('OWLOS SKY BEGIN ')) {
       u.screen.take(line);
       u.sky = [];
+      u.server = line.slice(16).trim().toUpperCase();
+      u.heard = Date.now();
     } else if (u.screen.take(line)) {
       u.planes = parseInt(line.slice(14), 10) || 0;
       renderBar();
@@ -1115,6 +1149,7 @@ function boardWin(u) {
   const id = u ? u.mac : 'demo';
   return desk.get(id) ?? desk.make(id, u ? u.name : 'The radar, a demo sky', {
     onFront() {
+      scene.mark(u?.online ? 'board' : null);
       if (app.cur !== (u ?? null)) {
         app.cur = u ?? null;
         app.view = u ? 'unit' : 'demo';
@@ -1134,12 +1169,34 @@ async function showLive(u) {
   app.cur = u ?? null;
   app.view = u ? 'unit' : 'demo';
   const w = boardWin(u);
-  w.show();
+  w.show(u ? document.querySelector(`[data-u="${u.mac}"]`) : null);
   fillBoard(u);
   w.front();
+  if (u?.online) {
+    offerTip(w, u);
+  }
   renderBar();
   desk.layout();
   w.root.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+/* the first board in this browser: a word that the screen here is the board's, for a little while */
+function offerTip(w, u) {
+  try {
+    if (localStorage.getItem('owlos.tip')) {
+      return;
+    }
+    localStorage.setItem('owlos.tip', '1');
+  } catch (e) {
+    console.warn(e);
+  }
+  const tip = document.createElement('div');
+  tip.className = 'tip';
+  tip.textContent = 'Control your board from here: touch this screen';
+  w.q('.main').prepend(tip);
+  const gone = () => tip.remove();
+  setTimeout(gone, 20000);
+  u.screen.canvas.addEventListener('pointerdown', gone, { once: true });
 }
 
 /* --- all your boards at once: every window open, and what goes for all of them --- */
@@ -1351,6 +1408,7 @@ fetch('version.json').then((r) => r.json()).then((v) => {
   newest = v.version;
   renderBar();
 }).catch((e) => console.warn(e));
+setInterval(showStates, 10000);                        // an answer that stopped coming shows by itself
 hero.start().then(() => {
   requestAnimationFrame(tickAll);
   return comeBack();

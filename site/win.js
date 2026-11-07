@@ -4,7 +4,15 @@
 // simply follow each other, as a page does.
 
 const GAP = 14;
+const SNAP = 10;                                       // this close to an edge, a window lies against it
 const ROW = 1180;                                      // how wide the tiles may lie
+
+const ICON = {
+  min: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M1.5 9.5h9" /></svg>',
+  max: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 1.5h7v7M1.5 3.5h7v7h-7z" /></svg>',
+  back: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M1.5 4.5h6v6h-6zM4.5 4.5v-3h6v6h-3" /></svg>',
+  close: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" /></svg>',
+};
 
 class Win {
   constructor(desk, id, title, { onFront = () => {}, onClose = () => {}, onResize = () => {}, className = '' }) {
@@ -16,10 +24,10 @@ class Win {
     this.root = document.createElement('section');
     this.root.className = `win ${className}`;
     this.root.hidden = true;
-    this.root.innerHTML = `<header class="winbar"><span class="wintitle"></span>
-      <button class="winbtn" data-act="min" title="Minimize" aria-label="minimize">&#8211;</button>
-      <button class="winbtn" data-act="max" title="Maximize" aria-label="maximize">&#9633;</button>
-      <button class="winbtn close" data-act="close" title="Close" aria-label="close">&#215;</button></header><div class="winbody"></div>`;
+    this.root.innerHTML = `<i class="winglow"></i><i class="winmark"></i><header class="winbar"><i class="windot"></i><span class="wintitle"></span><span class="winstate"></span>
+      <button class="winbtn" data-act="min" title="Minimize" aria-label="minimize">${ICON.min}</button>
+      <button class="winbtn" data-act="max" title="Maximize" aria-label="maximize">${ICON.max}</button>
+      <button class="winbtn close" data-act="close" title="Close" aria-label="close">${ICON.close}</button></header><div class="winbody"></div>`;
     this.bar = this.root.querySelector('.winbar');
     this.body = this.root.querySelector('.winbody');
     this.setTitle(title);
@@ -37,12 +45,59 @@ class Win {
     this.root.querySelector('.wintitle').textContent = text;
   }
 
+  /* what the title says of the thing inside, and the colour of the frame: good, warn, bad, or none */
+  setState(tone, text) {
+    this.root.querySelector('.winstate').textContent = text;
+    for (const el of [this.root, this.tab]) {
+      el?.classList.remove('good', 'warn', 'bad');
+      if (tone) {
+        el?.classList.add(tone);
+      }
+    }
+  }
+
+  /* down to a small tab in the corner, still alive: a click on the tab brings it back */
+  minimize() {
+    if (this.maxed) {
+      this.toggleMax();
+    }
+    const tab = document.createElement('button');
+    tab.className = `mintab ${['good', 'warn', 'bad'].filter((c) => this.root.classList.contains(c)).join(' ')}`;
+    tab.innerHTML = '<i class="windot"></i><span></span>';
+    tab.querySelector('span').textContent = this.root.querySelector('.wintitle').textContent;
+    tab.title = 'Bring it back';
+    tab.addEventListener('click', () => {
+      this.show(tab);
+      this.front();
+    });
+    this.desk.tray.append(tab);
+    this.tab = tab;
+    const r = this.root.getBoundingClientRect();
+    const f = tab.getBoundingClientRect();
+    const dx = f.left + f.width / 2 - (r.left + r.width / 2);
+    const dy = f.top + f.height / 2 - (r.top + r.height / 2);
+    const away = matchMedia('(prefers-reduced-motion: reduce)').matches ? null
+      : this.root.animate([{ transform: 'none', opacity: 1 }, { transform: `translate(${dx}px, ${dy}px) scale(.15)`, opacity: 0 }], { duration: 190, easing: 'ease-in' });
+    const done = () => {
+      this.root.hidden = true;
+      this.desk.layout();
+      this.onClose('min');
+    };
+    if (away) {
+      away.onfinish = done;
+    } else {
+      done();
+    }
+  }
+
   listen() {
     this.root.addEventListener('pointerdown', () => this.front());
     this.bar.addEventListener('click', (e) => {
       const act = e.target.closest('[data-act]')?.dataset.act;
       if (act === 'max') {
         this.toggleMax();
+      } else if (act === 'min') {
+        this.minimize();
       } else if (act) {
         this.hide();
         this.onClose(act);
@@ -57,11 +112,12 @@ class Win {
       if (e.target.closest('[data-act]') || this.maxed || this.desk.flat()) {
         return;
       }
+      this.desk.hold();
       const startX = e.clientX - this.root.offsetLeft;
       const startY = e.clientY - this.root.offsetTop;
       this.bar.setPointerCapture(e.pointerId);
       const move = (m) => {
-        this.at = { x: m.clientX - startX, y: m.clientY - startY };
+        this.at = this.desk.snapped(this, m.clientX - startX, m.clientY - startY);
         this.place();
         this.desk.layout();
       };
@@ -84,9 +140,22 @@ class Win {
     }
   }
 
-  show() {
+  /* from: an element it grows out of, the button that called it */
+  show(from = null) {
+    const opening = this.root.hidden;
+    from = from ?? this.tab;
+    this.tabPlace = this.tab?.getBoundingClientRect();
+    this.tab?.remove();
+    this.tab = null;
     this.root.hidden = false;
     this.desk.layout();
+    if (opening && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const r = this.root.getBoundingClientRect();
+      const f = from?.isConnected === false ? this.tabPlace : from?.getBoundingClientRect();
+      const dx = f ? f.left + f.width / 2 - (r.left + r.width / 2) : 0;
+      const dy = f ? f.top + f.height / 2 - (r.top + r.height / 2) : -14;
+      this.root.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${f ? 0.2 : 0.97})`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 170, easing: 'ease-out' });
+    }
     return this;
   }
 
@@ -100,12 +169,16 @@ class Win {
 
   front() {
     this.root.style.zIndex = String(++this.desk.z);
+    for (const w of this.desk.wins.values()) {
+      w.root.classList.toggle('active', w === this);
+    }
     this.onFront();
   }
 
   toggleMax() {
     this.maxed = !this.maxed;
     this.root.classList.toggle('maxed', this.maxed);
+    this.root.querySelector('[data-act=max]').innerHTML = this.maxed ? ICON.back : ICON.max;
     this.onResize();
     this.desk.layout();
   }
@@ -116,6 +189,9 @@ export class Desk {
     this.el = el;
     this.z = 10;
     this.wins = new Map();
+    this.tray = document.createElement('div');         // the minimized ones, in the corner
+    this.tray.id = 'tray';
+    document.body.append(this.tray);
     addEventListener('resize', () => this.layout());
   }
 
@@ -137,6 +213,39 @@ export class Desk {
     this.wins.get(id)?.root.remove();
     this.wins.delete(id);
     this.layout();
+  }
+
+  /* one is being moved by hand: the others stay exactly where they are, no tile jumps away */
+  hold() {
+    for (const w of this.wins.values()) {
+      if (!w.root.hidden && !w.maxed && !w.at) {
+        w.at = { x: w.root.offsetLeft, y: w.root.offsetTop };
+      }
+    }
+  }
+
+  /* where a dragged window comes to rest: against the page's edges and the others, when it is near */
+  snapped(win, x, y) {
+    const w = win.root.offsetWidth;
+    const h = win.root.offsetHeight;
+    const xs = [[0, 0], [this.el.clientWidth, -w]];
+    const ys = [[0, 0]];
+    for (const o of this.wins.values()) {
+      if (o !== win && !o.root.hidden && !o.maxed) {
+        const r = o.root;
+        xs.push([r.offsetLeft, 0], [r.offsetLeft, -w - GAP], [r.offsetLeft + r.offsetWidth, -w], [r.offsetLeft + r.offsetWidth + GAP, 0]);
+        ys.push([r.offsetTop, 0], [r.offsetTop, -h - GAP], [r.offsetTop + r.offsetHeight, -h], [r.offsetTop + r.offsetHeight + GAP, 0]);
+      }
+    }
+    const near = (v, list) => {
+      for (const [edge, shift] of list) {
+        if (Math.abs(v - (edge + shift)) < SNAP) {
+          return edge + shift;
+        }
+      }
+      return v;
+    };
+    return { x: near(x, xs), y: near(y, ys) };
   }
 
   /* the highest free place, then the leftmost, for a window of this size, among those already lying */

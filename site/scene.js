@@ -64,6 +64,7 @@ export function startScene(canvas, getRadar, onPick) {
   let spots = [];
   let hover = null;
   let picked = null;
+  let marked = null;     // what the page has in hand: the board of the window on top
   let relief = null;     // the real ground, when it has come
   let sky = null;        // the last real planes
 
@@ -893,10 +894,10 @@ export function startScene(canvas, getRadar, onPick) {
   }
 
   function drawBrackets() {
-    for (const id of new Set([hover, picked])) {
+    for (const id of new Set([hover, picked, marked])) {
       const b = spots.find((p) => p.id === id && !p.label);
       if (b) {
-        brackets(b, rgba(HIGH, id === picked ? 1 : 0.7));
+        brackets(b, id === marked ? rgba(WIFI, 1) : rgba(HIGH, id === picked ? 1 : 0.7));
       }
     }
   }
@@ -1167,6 +1168,9 @@ export function startScene(canvas, getRadar, onPick) {
     isShown: () => shown,
     clear() {
       picked = null;
+    },
+    mark(id) {
+      marked = id;
     },
     setRelief(fn) {
       relief = fn;
