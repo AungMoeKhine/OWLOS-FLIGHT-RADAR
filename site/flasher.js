@@ -48,7 +48,12 @@ function terminal(say) {
 async function loader(port, say) {
   const transport = new Transport(port, false);
   const esp = new ESPLoader({ transport, baudrate: 460800, romBaudrate: 115200, terminal: terminal(say) });
-  await esp.main();
+  try {
+    await esp.main();
+  } catch (e) {
+    await letGo(port, transport);                      // a chip that did not answer must not keep the port
+    throw e;
+  }
   return { transport, esp };
 }
 

@@ -5,6 +5,7 @@
     { mac: 'aa0000000002', build: 'ili9341', theme: 2 },
     { mac: 'aa0000000001', build: 'st7796', theme: 0 },
     { mac: 'aa0000000003', build: 'gc9a01', theme: 1 },
+    { mac: 'aa0000000004', build: 'ili9486', theme: 0 },
   ];
   class FakePort extends EventTarget {
     constructor(b) {
@@ -18,6 +19,9 @@
     }
 
     async open() {
+      if (this.readable) {
+        throw new DOMException('The port is already open.', 'InvalidStateError');
+      }
       this.readable = new ReadableStream({
         start: (c) => {
           this.out = c;
@@ -34,6 +38,8 @@
     async close() {
       clearInterval(this.sky);
       this.out = null;
+      this.readable = null;
+      this.writable = null;
     }
 
     line(text) {

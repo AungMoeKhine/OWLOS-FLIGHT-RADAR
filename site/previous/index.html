@@ -984,8 +984,15 @@ fetch('CHANGES.md', { cache: 'no-cache' }).then(r => r.ok ? r.text() : null).the
  * in fw/ and the older ones in fw/<version>/ (.github/archive.sh). picking one points every board's
  * button at that version's manifest, a board that came later says so instead. ?v=0.3 picks one
  * from a link --- */
+/* this page moved to previous/ with a <base>, and ESP Web Tools reads a manifest against the page's own
+ * address, not the base: the buttons get the whole address */
+const onSite = (path) => new URL(path, document.baseURI).href;
+
 const flashers = [...document.querySelectorAll('esp-web-install-button')].map(b => {
   const m = (b.getAttribute('manifest') || '').match(/^fw\/([^/]+)\/manifest\.json$/);
+  if (m) {
+    b.setAttribute('manifest', onSite(m[0]));
+  }
   const later = document.createElement('p');
   later.className = 'nope flash';
   later.hidden = true;
@@ -1000,7 +1007,7 @@ function pickVersion(all, i) {
       continue;
     }
     const has = v.boards.includes(f.board);
-    f.b.setAttribute('manifest', v.dir + '/' + f.board + '/manifest.json');
+    f.b.setAttribute('manifest', onSite(v.dir + '/' + f.board + '/manifest.json'));
     f.b.hidden = !has;
     f.later.hidden = has;
     f.later.textContent = has ? '' : 'Not in ' + v.version + ': this board came in a later version.';

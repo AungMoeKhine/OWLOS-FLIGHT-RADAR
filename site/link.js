@@ -1,5 +1,12 @@
 // One board on one cable: the lines of firmware/main/console.h over Web Serial.
 
+const within = (promise, ms) => Promise.race([promise, new Promise((r) => {
+  setTimeout(r, ms);
+})]);
+
+/* the link on each port: a port left open by a try that failed must be let go, or it stays busy */
+const links = new WeakMap();
+
 export class Link {
   constructor(port) {
     this.port = port;
@@ -11,6 +18,8 @@ export class Link {
   }
 
   async open() {
+    await links.get(this.port)?.close();
+    links.set(this.port, this);
     await this.port.open({ baudRate: 115200, bufferSize: 65536 });
     // both lines released: the board runs. on the CYD this may restart it, it then says READY anyway
     await this.port.setSignals({ dataTerminalReady: false, requestToSend: false });
@@ -97,14 +106,18 @@ export class Link {
     this.onLost = null;
     this.onLine = null;
     clearInterval(this.keep);
+    links.delete(this.port);
+    if (!this.reader) {
+      return;
+    }
     try {
-      await this.send('OWLOS SKY OFF');
+      await within(this.send('OWLOS SKY OFF'), 800);   // a board that does not read must not hold the port
     } catch (e) {
       console.warn(e);
     }
     try {
-      await this.reader.cancel();
-      await this.pumping;
+      await within(this.reader.cancel(), 1000);
+      await within(this.pumping, 1000);
       this.reader.releaseLock();
       await this.port.close();
     } catch (e) {

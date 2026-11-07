@@ -236,14 +236,16 @@ export function boardCommands(api) {
       },
     },
     {
-      name: 'log', group: 'boards', summary: 'what the boards said; log on: as they say it', usage: 'log [on|off]', where: 'here', effect: 'reads', data: '[{ line }]',
+      name: 'log', group: 'boards', summary: 'what the board on show said, --all: every board; log on: as it says it', usage: 'log [on|off] [--board NAME] [--all]', where: 'here',
+      options: { board: on.board, all: on.all }, valued: ['board'], effect: 'reads', data: '[{ line }]',
       run(ctx) {
+        const only = ctx.opts.all ? null : ctx.opts.board ? chosen(ctx)[0] : api.current();
         const how = ctx.args[0];
         if (how === 'on' || how === 'off') {
-          api.follow(how === 'on');
+          api.follow(how === 'on', only);
           return 0;
         }
-        for (const line of api.logLines()) {
+        for (const line of api.logLines(only)) {
           ctx.out(line, 'muted');
           ctx.data({ line });
         }

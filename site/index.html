@@ -238,6 +238,11 @@
   .mintab.bad { --tone: #ff6070; }
   .mintab:hover { color: #03081a; background: var(--tone); transform: translateY(-2px); }
   .winbody { padding: 12px; }
+  #termbody, .winbody { scrollbar-width: thin; scrollbar-color: #2c6a9c transparent; }
+  #termbody::-webkit-scrollbar, .winbody::-webkit-scrollbar { width: 8px; height: 8px; }
+  #termbody::-webkit-scrollbar-track, .winbody::-webkit-scrollbar-track { background: transparent; }
+  #termbody::-webkit-scrollbar-thumb, .winbody::-webkit-scrollbar-thumb { background: #2c6a9c; }
+  #termbody::-webkit-scrollbar-thumb:hover, .winbody::-webkit-scrollbar-thumb:hover { background: var(--prim); }
   .tip {
     position: relative; width: max-content; max-width: 100%; margin: 0 auto 12px; padding: 5px 12px; color: #03081a; background: var(--warn); font: 700 13px var(--mono);
     clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); animation: tipup 1.1s ease-in-out infinite alternate;
