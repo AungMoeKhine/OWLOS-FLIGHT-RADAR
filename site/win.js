@@ -48,7 +48,7 @@ class Win {
   /* what the title says of the thing inside, and the colour of the frame: good, warn, bad, or none */
   setState(tone, text) {
     this.root.querySelector('.winstate').textContent = text;
-    for (const el of [this.root, this.tab]) {
+    for (const el of [this.root, this.mintab]) {
       el?.classList.remove('good', 'warn', 'bad');
       if (tone) {
         el?.classList.add(tone);
@@ -71,7 +71,7 @@ class Win {
       this.front();
     });
     this.desk.tray.append(tab);
-    this.tab = tab;
+    this.mintab = tab;
     const r = this.root.getBoundingClientRect();
     const f = tab.getBoundingClientRect();
     const dx = f.left + f.width / 2 - (r.left + r.width / 2);
@@ -143,10 +143,10 @@ class Win {
   /* from: an element it grows out of, the button that called it */
   show(from = null) {
     const opening = this.root.hidden;
-    from = from ?? this.tab;
-    this.tabPlace = this.tab?.getBoundingClientRect();
-    this.tab?.remove();
-    this.tab = null;
+    from = from ?? this.mintab;
+    this.tabPlace = this.mintab?.getBoundingClientRect();
+    this.mintab?.remove();
+    this.mintab = null;
     this.root.hidden = false;
     this.desk.layout();
     if (opening && !matchMedia('(prefers-reduced-motion: reduce)').matches) {

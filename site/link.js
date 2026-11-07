@@ -7,6 +7,10 @@ const within = (promise, ms) => Promise.race([promise, new Promise((r) => {
 /* the link on each port: a port left open by a try that failed must be let go, or it stays busy */
 const links = new WeakMap();
 
+/* what a serial line can say and still go on: the read breaks, a new reader carries on. a board
+ * restarting is full of them, a CP210x reports them, a CH340 hardly ever */
+const LINE_ERRORS = ['BreakError', 'BufferOverrunError', 'FramingError', 'ParityError'];
+
 export class Link {
   constructor(port) {
     this.port = port;
@@ -21,31 +25,46 @@ export class Link {
     await links.get(this.port)?.close();
     links.set(this.port, this);
     await this.port.open({ baudRate: 115200, bufferSize: 65536 });
+    this.opened = true;
     // both lines released: the board runs. on the CYD this may restart it, it then says READY anyway
     await this.port.setSignals({ dataTerminalReady: false, requestToSend: false });
-    this.reader = this.port.readable.getReader();
     this.pumping = this.pump();
   }
 
   async pump() {
     const decoder = new TextDecoder();
     let text = '';
-    try {
-      for (;;) {
-        const { value, done } = await this.reader.read();
-        if (done) {
-          break;
+    while (this.port.readable && !this.closing) {
+      this.reader = this.port.readable.getReader();
+      try {
+        for (;;) {
+          const { value, done } = await this.reader.read();
+          if (done) {
+            this.closing = true;
+            break;
+          }
+          text += decoder.decode(value, { stream: true });
+          let i;
+          while ((i = text.indexOf('\n')) >= 0) {
+            const line = text.slice(0, i).replace(/\r$/, '').replace(/\x1b\[[0-9;]*m/g, '');
+            text = text.slice(i + 1);
+            try {
+              this.take(line);
+            } catch (e) {
+              console.warn('a line the page could not take', e);   // the page's fault, not the cable's
+            }
+          }
         }
-        text += decoder.decode(value, { stream: true });
-        let i;
-        while ((i = text.indexOf('\n')) >= 0) {
-          const line = text.slice(0, i).replace(/\r$/, '').replace(/\x1b\[[0-9;]*m/g, '');
-          text = text.slice(i + 1);
-          this.take(line);
+      } catch (e) {
+        if (LINE_ERRORS.includes(e.name)) {
+          this.take(`(${e.name} on the line)`);
+        } else {
+          console.warn('the port went away', e);
+          this.closing = true;
         }
+      } finally {
+        this.reader.releaseLock();
       }
-    } catch (e) {
-      console.warn('the port went away', e);
     }
     this.onLost?.();
   }
@@ -107,18 +126,23 @@ export class Link {
     this.onLine = null;
     clearInterval(this.keep);
     links.delete(this.port);
-    if (!this.reader) {
+    if (!this.opened) {
       return;
     }
+    this.opened = false;
     try {
       await within(this.send('OWLOS SKY OFF'), 800);   // a board that does not read must not hold the port
     } catch (e) {
       console.warn(e);
     }
+    this.closing = true;
     try {
-      await within(this.reader.cancel(), 1000);
-      await within(this.pumping, 1000);
-      this.reader.releaseLock();
+      await within(this.reader?.cancel(), 1000);
+    } catch (e) {
+      console.warn(e);                                 // it broke already: the port still has to close
+    }
+    await within(this.pumping, 1000);
+    try {
       await this.port.close();
     } catch (e) {
       console.warn(e);

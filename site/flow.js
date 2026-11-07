@@ -318,7 +318,8 @@ function barState() {
     text = 'NO BOARD: A DEMO SKY';
   } else if (app.view === 'unit' && app.cur?.online) {
     const u = app.cur;
-    text = `${usbName(u.port)} / ${esc(BOARDS[u.build].name)} / ${u.version} / ${u.wifi ? 'WIFI' : 'NO WIFI'} / ${u.planes} PLANES`;
+    text = browned(u) ? `${usbName(u.port)} / ${esc(BOARDS[u.build].name)} / TOO LITTLE POWER`
+      : `${usbName(u.port)} / ${esc(BOARDS[u.build].name)} / ${u.version} / ${u.wifi ? 'WIFI' : 'NO WIFI'} / ${u.planes} PLANES`;
   } else if (app.view === 'unit' && app.cur) {
     text = 'NOT CONNECTED';
   } else {
@@ -388,9 +389,18 @@ function planesFrom(u) {
 /* what the window of a board says: is it on the cable, on the WiFi, does the plane network answer */
 const STALE_MS = 60000;
 
+/* the chip's own guard: the voltage fell, mostly when the WiFi starts. then the board restarts, for ever.
+ * the page hears it say so, and a board that does this is not one that "has no WiFi" */
+const BROWN_MS = 30000;
+const LOW_POWER = 'It keeps restarting: its USB gives too little power. Try another USB port, a shorter cable or a powered hub';
+const browned = (u) => Date.now() - (u.browned ?? 0) < BROWN_MS;
+
 function unitState(u) {
   if (!u.online) {
     return ['bad', 'NOT CONNECTED'];
+  }
+  if (browned(u)) {
+    return ['bad', 'TOO LITTLE POWER: IT KEEPS RESTARTING'];
   }
   if (u.aligning) {
     return ['warn', 'TOUCH THE CROSSES'];
@@ -412,6 +422,10 @@ function showStates() {
     const w = desk.get(u.mac);
     if (w) {
       w.setState(...unitState(u));
+      const note = w.q('.livenote');
+      if (note) {
+        note.innerHTML = liveNote(u);
+      }
     }
   }
 }
@@ -648,6 +662,11 @@ async function attach(link, port, who) {
     }
   };
   link.onLine = (line) => {
+    if (line.includes('Brownout detector')) {
+      u.browned = Date.now();
+      renderBar();
+      showStates();
+    }
     if (line.startsWith('OWLOS CFG ')) {
       const now = JSON.parse(line.slice(10));
       const moved = now.lat !== u.cfg?.lat || now.lon !== u.cfg?.lon;
@@ -708,7 +727,11 @@ async function attach(link, port, who) {
 /* one port, whatever is on it. an answer of ours: attached. anything else: the caller goes on */
 async function tryPort(port) {
   const link = new Link(port);
-  link.onLine = (line) => say(line, 'board', port);    // what a board says while it starts: `log` shows it
+  let low = false;
+  link.onLine = (line) => {                            // what a board says while it starts: `log` shows it
+    low = low || line.includes('Brownout detector');
+    say(line, 'board', port);
+  };
   await link.open();
   try {
     const who = await link.hello();
@@ -716,10 +739,13 @@ async function tryPort(port) {
       return { unit: await attach(link, port, who) };
     }
     await link.close();
+    if (low) {
+      throw new Error(LOW_POWER);
+    }
     return { who };
   } catch (e) {
     await link.close();                                // a try that broke half way must not keep the port
-    throw e;
+    throw low ? new Error(LOW_POWER) : e;
   }
 }
 
@@ -831,22 +857,27 @@ async function flashing(port, build, name, erase, others) {
 /* the board restarts after flashing, and a board with its own USB comes back as a new port */
 async function afterFlash(port) {
   app.why = 'it stayed silent';
-  await wait(1500);
-  for (let t = 0; t < 4; t++) {
-    try {
-      const { unit } = await tryPort(port);
-      if (unit) {
-        return unit;
-      }
-      say('no answer yet', 'board', port);
-    } catch (e) {
-      console.warn(e);
-      app.why = e.message;
-      say(e.message, 'board', port);
-    }
+  app.settling = true;                                 // this port is ours for now: lookForReturns keeps off
+  try {
     await wait(1500);
+    for (let t = 0; t < 4; t++) {
+      try {
+        const { unit } = await tryPort(port);
+        if (unit) {
+          return unit;
+        }
+        say('no answer yet', 'board', port);
+      } catch (e) {
+        console.warn(e);
+        app.why = e.message;
+        say(e.message, 'board', port);
+      }
+      await wait(1500);
+    }
+    return null;
+  } finally {
+    app.settling = false;
   }
-  return null;
 }
 
 async function flashNew() {
@@ -962,6 +993,9 @@ function screenWords(u) {
 function liveNote(u) {
   if (!u) {
     return '<p class="note wait"><b>A demo sky.</b> Tap a plane, drag the rim to turn the map, drag inside to zoom.</p>';
+  }
+  if (browned(u)) {
+    return '<p class="note wait"><b>Too little power.</b> The board restarts each time its WiFi starts, so this picture is not what it shows. Try another USB port, a shorter cable or a powered hub.</p>';
   }
   if (!u.wifi) {
     return '<p class="note wait"><b>No WiFi yet.</b> Touch this screen and the board moves too. SETTINGS has the WiFi.</p>';
@@ -1373,6 +1407,30 @@ function tickAll(now) {
   }
 }
 
+/* a board back on its cable. the browser's connect event mostly tells, but once, a CH340 on a bad cable,
+ * it did not come: the port was there, connected and closed. so the page looks for itself too. a board
+ * that does not answer is left alone for a while: each try restarts it */
+async function lookForReturns() {
+  if (app.busy || app.settling) {
+    return;
+  }
+  for (const u of app.units) {
+    if (!u.online && u.port?.connected && !u.port.readable && Date.now() > (u.nextLook ?? 0)) {
+      u.nextLook = Date.now() + 30000;
+      try {
+        const { unit } = await tryPort(u.port);
+        if (unit) {
+          say(`${unit.name} is back`, 'dim');
+          showLive(unit);
+        }
+      } catch (e) {
+        console.warn(e);
+        say(`${u.name}: ${e.message}`, 'board', u.port);
+      }
+    }
+  }
+}
+
 /* the boards this browser knows come back as they were, and those on a cable it may use connect by
  * themselves, with no window: the browser remembers the ports it was allowed */
 async function comeBack() {
@@ -1397,6 +1455,9 @@ async function comeBack() {
       await tryPort(port);
     } catch (e) {
       console.warn('a remembered port', e);
+      if (e.message === LOW_POWER) {
+        trouble('A board does not start', `${LOW_POWER}.`);
+      }
     }
   }
   navigator.serial.addEventListener('connect', async (e) => {
@@ -1413,6 +1474,7 @@ async function comeBack() {
   for (const u of here()) {
     await showLive(u);
   }
+  setInterval(lookForReturns, 3000);
 }
 
 $('try').addEventListener('click', () => {

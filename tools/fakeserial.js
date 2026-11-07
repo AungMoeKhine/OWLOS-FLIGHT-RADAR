@@ -12,6 +12,7 @@
       super();
       this.b = b;
       this.text = '';
+      this.connected = true;
     }
 
     getInfo() {
@@ -22,17 +23,45 @@
       if (this.readable) {
         throw new DOMException('The port is already open.', 'InvalidStateError');
       }
+      this.fresh();
+      this.writable = new WritableStream({
+        write: (chunk) => this.heard(new TextDecoder().decode(chunk)),
+      });
+      if (this.b.build === 'ili9486') {                // a CP210x says so when a board restarts: the read breaks
+        setTimeout(() => this.noise(), 30);
+      }
+    }
+
+    fresh() {
       this.readable = new ReadableStream({
         start: (c) => {
           this.out = c;
         },
       });
-      this.writable = new WritableStream({
-        write: (chunk) => this.heard(new TextDecoder().decode(chunk)),
-      });
+    }
+
+    noise() {
+      const broken = this.out;
+      this.fresh();
+      broken?.error(new DOMException('A framing error', 'FramingError'));
     }
 
     async setSignals() {
+    }
+
+    /* the cable out, and in again: a NetworkError for the reader, and here no connect event */
+    unplug() {
+      this.connected = false;
+      clearInterval(this.sky);
+      const broken = this.out;
+      this.out = null;
+      this.readable = null;
+      this.writable = null;
+      broken?.error(new DOMException('The device has been lost.', 'NetworkError'));
+    }
+
+    plug() {
+      this.connected = true;
     }
 
     async close() {
