@@ -11,13 +11,12 @@ const KEEP_LINES = 2000;
 
 export class Terminal {
   constructor({ makeShell, onToggle = () => {} }) {
-    this.box = document.getElementById('term');
+    this.head = document.getElementById('termhead');
     this.body = document.getElementById('termbody');
     this.log = document.getElementById('termlog');
     this.promptBox = document.getElementById('termprompt');
     this.input = document.getElementById('termin');
-    this.last = document.getElementById('termlast');
-    this.hint = document.getElementById('termhint');
+
     this.onToggle = onToggle;
     this.colour = null;
     this.bold = false;
@@ -41,7 +40,7 @@ export class Terminal {
   }
 
   listen() {
-    document.getElementById('termhead').addEventListener('click', () => this.toggle(this.body.hidden));
+    this.head.addEventListener('click', () => this.toggle(this.body.hidden));
     this.body.addEventListener('click', () => {
       if (!getSelection().toString()) {
         this.input.focus({ preventScroll: true });
@@ -56,11 +55,14 @@ export class Terminal {
     this.input.addEventListener('keydown', (e) => this.key(e));
   }
 
+  fit() {
+    this.shell.width = Math.floor(this.body.clientWidth / 8.4);
+    this.body.scrollTop = this.body.scrollHeight;
+  }
+
   toggle(open) {
     this.body.hidden = !open;
-    document.getElementById('termhead').setAttribute('aria-expanded', String(open));
-    this.hint.textContent = open ? 'close' : 'open the console, Ctrl+`';
-    this.box.hidden = false;
+    this.head.setAttribute('aria-pressed', String(open));
     this.onToggle(open);
     if (open) {
       if (!this.greeted) {
@@ -164,12 +166,6 @@ export class Terminal {
   /* a line that a button ran, shown as if typed */
   echo(line) {
     this.write(`${this.promptText ?? ''}${line}\r\n`);
-    this.note(line);
-  }
-
-  note(text) {
-    this.last.textContent = text;
-    this.box.hidden = false;
   }
 
   /* one line through the shell. buttons come here too: one at a time, in order */

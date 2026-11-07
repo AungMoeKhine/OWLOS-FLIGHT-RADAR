@@ -10,6 +10,7 @@ import { detect, flash as writeFirmware } from './flasher.js';
 import { Shell } from './console/shell.js';
 import { CORE_COMMANDS, CORE_GROUPS } from './console/commands.js';
 import { Terminal } from './term.js';
+import { Desk } from './win.js';
 import { BoardPaths, BOARD_GROUPS, boardCommands } from './board-console.js';
 
 const $ = (id) => document.getElementById(id);
@@ -267,6 +268,7 @@ class Screen {
 /* --- what the page knows --- */
 
 const hero = new Screen('Twin');
+const desk = new Desk($('desk'));
 const app = {
   units: [],             // your boards
   cur: null,             // the one on show
@@ -362,6 +364,7 @@ function pickSky() {
   }
   skyUnit = u;
   if (u) {
+    planesFrom(u);                                     // what it said last: a board answers only every 15 s
     const { lat, lon } = u.cfg;
     reliefAround(lat, lon, KM_PER_UNIT, UNITS_PER_METRE).then((fn) => {
       if (skyUnit === u) {
@@ -392,7 +395,10 @@ function renderBar() {
     chips.push(`<button class="uchip${u.online ? '' : ' off'}" data-u="${u.mac}" aria-pressed="${app.view === 'unit' && app.cur === u}"><i></i>${esc(u.name.toUpperCase())}</button>`);
   }
   if ('serial' in navigator) {
-    chips.push(`<button class="uchip add" data-add>${app.units.length ? '+ ADD A BOARD' : 'CONNECT A DEVICE'}</button>`);
+    chips.push('<button class="uchip add" data-add>+ ADD A BOARD</button>');
+  }
+  if (desk.wins.size > 1) {
+    chips.push('<button class="uchip add" data-arrange>ARRANGE</button>');
   }
   $('barchips').innerHTML = chips.join('');
   $('barstate').innerHTML = barState();
@@ -412,6 +418,8 @@ $('bar').addEventListener('click', (e) => {
     showAll();
   } else if (b.dataset.add !== undefined) {
     addBoard();
+  } else if (b.dataset.arrange !== undefined) {
+    desk.arrange();
   } else if (b.dataset.u) {
     showLive(byMac(b.dataset.u));
   } else if (b.dataset.update) {
@@ -441,7 +449,6 @@ function say(text, kind = '') {
     }
   } else {
     term.write(`\x1b[90m${text}\x1b[0m\r\n`);
-    term.note(text);
   }
 }
 
@@ -494,6 +501,15 @@ const boardApi = {
   logLines: () => boardLog.slice(-200),
 };
 
+function consoleWin() {
+  let w = desk.get('console');
+  if (!w) {
+    w = desk.make('console', 'Console', { className: 'console', onClose: () => term.toggle(false), onResize: () => term.fit() });
+    w.body.append($('termbody'));
+  }
+  return w;
+}
+
 term = new Terminal({
   makeShell: (io) => new Shell({
     ...io,
@@ -505,17 +521,33 @@ term = new Terminal({
     user: 'pilot',
   }),
   onToggle(open) {
-    document.body.classList.toggle('termopen', open);
+    const w = consoleWin();
     if (open) {
-      document.querySelector('#stage .glass')?.scrollIntoView({ block: 'start' });   // what a command does stays in sight
+      w.show();
+      w.front();
+    } else {
+      w.root.hidden = true;
+      desk.layout();
     }
   },
 });
 
 /* --- a board on a cable --- */
 
+function wizard() {
+  let w = desk.get('connect');
+  if (!w) {
+    w = desk.make('connect', 'Connect a device', { className: 'wide' });
+    w.body.innerHTML = '<ol class="steps" id="steps"><li>1 CONNECT</li><li>2 YOUR BOARD</li><li>3 FLASH</li><li>4 LIVE</li></ol><div id="stage"></div>';
+  }
+  w.show();
+  w.front();
+  w.root.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  return w;
+}
+
 function step(n) {
-  $('flow').hidden = false;
+  wizard();
   $('steps').hidden = false;
   [...$('steps').children].forEach((li, i) => {
     li.className = i + 1 === n ? 'now' : i + 1 < n ? 'done' : '';
@@ -523,13 +555,15 @@ function step(n) {
 }
 
 function manage() {
-  $('flow').hidden = false;
+  wizard();
   $('steps').hidden = true;
 }
 
 function stage(html) {
+  wizard();
   const s = $('stage');
   s.innerHTML = `<div class="stage">${html}</div>`;
+  desk.layout();
   return s;
 }
 
@@ -572,7 +606,7 @@ async function attach(link, port, who) {
         skyUnit = null;                                // a new home: the ground under it again
         pickSky();
       }
-      drawPane();
+      drawPane(u);
     } else if (line.startsWith('OWLOS ALIGN ')) {
       u.aligning = line.endsWith('1');
       renderBar();
@@ -588,8 +622,8 @@ async function attach(link, port, who) {
       u.sky = [];
     } else if (u.screen.take(line)) {
       u.planes = parseInt(line.slice(14), 10) || 0;
-      planesFrom(u);
       renderBar();
+      planesFrom(u);
     }
     if (!line.startsWith('OWLOS PLANE') && !line.startsWith('OWLOS SKY')) {
       say(line, 'board');
@@ -600,13 +634,10 @@ async function attach(link, port, who) {
     u.link = null;
     u.screen.m._twin_board(0);
     say(`${u.name} is gone from its cable`, 'dim');
-    if (app.view === 'all') {
-      showAll();
-    } else if (app.cur === u) {
-      showLive(u);
-    } else {
-      renderBar();
+    if (desk.get(u.mac)) {
+      fillBoard(u);
     }
+    renderBar();
   };
   await link.send('OWLOS SKY ON');
   link.keep = setInterval(() => {
@@ -639,7 +670,6 @@ async function addBoard() {
   }
   step(1);
   stage('<h2>Asking the board</h2><p>One moment.</p>');
-  $('flow').scrollIntoView();
   say('connect', 'cmd');
   app.port = port;
   app.kind = null;
@@ -792,24 +822,25 @@ async function updateAll() {
   showAll();
 }
 
-/* --- all your boards at once --- */
+/* --- a board's window --- */
 
 /* a board's screen one to one: its pixel is one pixel of the monitor, the picture exactly as the board
  * has it. + and - beside it make that a whole square of two, three, as the person likes. counted in the
  * monitor's pixels, not the page's, or a Windows scale of 125% stretches and blurs it. only a screen
  * too big for its place is shrunk, and smoothed */
-function fit(el, screen) {
+function fit(el, screen, maxed = false) {
   const photo = el.classList.contains('yellow');
   const dpr = devicePixelRatio || 1;
-  const wide = $('stage').clientWidth - 70;            // a big one takes the whole width, the settings go under it
+  const wide = innerWidth - (maxed ? 60 : 100);
   const aroundX = photo ? (PHOTO.left + PHOTO.right) / PHOTO.w : 0;
   const aroundY = photo ? (PHOTO.top + PHOTO.bottom) / PHOTO.w * (screen.w / screen.h) : 0;
   const room = wide * dpr / (1 + aroundX);
-  const high = Math.max(240, innerHeight * 0.7) * dpr / (1 + aroundY);
+  const high = Math.max(240, innerHeight * (maxed ? 0.74 : 0.8)) * dpr / (1 + aroundY);
   const most = Math.min(room / screen.w, high / screen.h);
   const base = Math.max(1, Math.round(dpr));
   screen.zoomMost = Math.max(1, Math.floor(most / base));
-  const k = Math.min(most, base * (app.view === 'all' ? 1 : Math.min(screen.zoom, screen.zoomMost)));
+  const want = maxed ? screen.zoomMost : Math.min(screen.zoom, screen.zoomMost);
+  const k = Math.min(most, base * want);
   const w = Math.round(screen.w * k);
   const h = Math.round(screen.h * k);
   screen.k = k;
@@ -822,94 +853,14 @@ function fit(el, screen) {
     const s = w / dpr / PHOTO.w;
     el.style.borderWidth = `${PHOTO.top * s}px ${PHOTO.right * s}px ${PHOTO.bottom * s}px ${PHOTO.left * s}px`;
   }
-  el.closest('.live')?.classList.toggle('stack', w / dpr * (1 + aroundX) > wide - 390);
   screen.show();
 }
 
 /* the photo of a CYD round the screen: where the glass lies in img/board-35.png, its index.html border-image */
 const PHOTO = { top: 34, right: 78, bottom: 24, left: 100, w: 522 };
 
-let mounted = [];
-
-function mount(el, screen, build) {
-  el.classList.add('glass');
-  el.classList.toggle('round', !!BOARDS[build]?.round);
-  el.classList.toggle('yellow', !!BOARDS[build]?.yellow);
-  el.replaceChildren(screen.canvas);
-  mounted = mounted.filter(([e]) => e.isConnected);
-  mounted.push([el, screen]);
-  fit(el, screen);
-}
-
-function zoomWords() {
-  const s = screenNow();
-  if ($('zoomword')) {
-    const z = Math.min(s.zoom, s.zoomMost);
-    $('zoomword').textContent = `${z}x`;
-    $('zoomout').disabled = z <= 1;
-    $('zoomin').disabled = z >= s.zoomMost;
-  }
-}
-
-function zoomBy(step) {
-  const s = screenNow();
-  s.zoom = Math.max(1, Math.min(s.zoomMost, Math.min(s.zoom, s.zoomMost) + step));
-  fit($('glass'), s);
-  zoomWords();
-  remember();
-}
-
-addEventListener('resize', () => {
-  for (const [el, screen] of mounted) {
-    if (el.isConnected) {
-      fit(el, screen);
-    }
-  }
-  zoomWords();
-});
-
-function tile(u) {
-  const b = BOARDS[u.build];
-  const body = u.online ? `<div class="slot"><div data-glass="${u.mac}"></div></div>`
-    : '<div class="slot"><p class="gone">Not connected. Plug it in and it comes back by itself.</p></div>';
-  const line = u.online ? `${esc(b.name)}, ${u.version}` : esc(b.name);
-  const action = u.online ? `<button class="btn quiet" data-open="${u.mac}">OPEN</button><button class="btn quiet" data-one="${u.mac}">${older(u.version, newest) ? 'UPDATE' : 'FLASH AGAIN'}</button>`
-    : `<button class="btn quiet" data-open="${u.mac}">DETAILS</button>`;
-  return `<article class="tile${u.online ? '' : ' off'}"><h3>${esc(u.name)}</h3><span>${line}</span>${body}<div class="row">${action}</div></article>`;
-}
-
-function showAll() {
-  app.view = 'all';
-  app.cur = null;
-  manage();
-  const old = here().filter((u) => older(u.version, newest)).length;
-  const s = stage(`<h2>Your boards</h2><p>Every connected board, live. Touch a screen here and it moves there. Next time they are here without asking.</p>
-    <div class="tiles">${app.units.map(tile).join('')}</div>
-    <div class="pane common"><div class="field"><span>Look, on every board</span><div class="chips">${LOOKS.map((l) => `<button class="chip" data-every="look=${l}">${l.toUpperCase()}</button>`).join('')}</div></div>
-    <div class="field"><span>Colours, on every board</span><div class="chips">${THEMES.map((t) => `<button class="chip" data-every="theme=${t}">${t.toUpperCase()}</button>`).join('')}</div></div>
-    ${old ? `<button class="btn quiet" id="updateall">UPDATE ${old === 1 ? 'THE OLD ONE' : `ALL ${old}`} TO ${newest}</button>` : ''}</div>`);
-  for (const u of here()) {
-    mount(s.querySelector(`[data-glass="${u.mac}"]`), u.screen, u.build);
-  }
-  s.querySelectorAll('[data-open]').forEach((el) => {
-    el.addEventListener('click', () => showLive(byMac(el.dataset.open)));
-  });
-  s.querySelectorAll('[data-one]').forEach((el) => {
-    el.addEventListener('click', () => updateThen(byMac(el.dataset.one)));
-  });
-  s.querySelectorAll('[data-every]').forEach((el) => {
-    el.addEventListener('click', () => {
-      term.run(`set ${el.dataset.every} --all`);
-    });
-  });
-  s.querySelector('#updateall')?.addEventListener('click', updateAll);
-  renderBar();
-}
-
-/* --- one board --- */
-
-function facts() {
-  return app.cur ? unitFacts(app.cur) : [['Board', 'none, a demo sky in this page']];
+function facts(u) {
+  return u ? unitFacts(u) : [['Board', 'none, a demo sky in this page']];
 }
 
 function unitFacts(u) {
@@ -919,22 +870,19 @@ function unitFacts(u) {
 
 /* what a board just flashed may ask of you, on its own screen */
 function firstWords(u) {
-  const list = [];
-  if (u.build === 'ili9341') {
-    list.push('Colours wrong, or the picture upside down or mirrored? This board is sold with three screens: press BOOT right after a restart, each press tries the next one.');
-  }
-  return list.length ? `<p class="note wait">${list.join(' ')}</p>` : '';
+  return u.build === 'ili9341'
+    ? '<p class="note wait">Colours wrong, or the picture upside down or mirrored? This board is sold with three screens: press BOOT right after a restart, each press tries the next one.</p>'
+    : '';
 }
 
-function liveNote() {
-  const u = app.cur;
+function liveNote(u) {
   if (!u) {
     return '<p class="note wait"><b>A demo sky.</b> Tap a plane, drag the rim to turn the map, drag inside to zoom.</p>';
   }
   if (!u.wifi) {
-    return '<p class="note wait"><b>No WiFi yet.</b> This is the board\'s screen: touch it here, it moves there.</p>';
+    return '<p class="note wait"><b>No WiFi yet.</b> Touch this screen and the board moves too. SETTINGS has the WiFi.</p>';
   }
-  return `<p class="note"><b>On "${esc(u.wifi)}".</b> This is the board's screen: touch it here, it moves there.</p>`;
+  return `<p class="note"><b>On "${esc(u.wifi)}".</b> Touch this screen and the board moves too.</p>`;
 }
 
 async function findHome(text) {
@@ -943,164 +891,256 @@ async function findHome(text) {
   return list[0] ? { lat: Number(list[0].lat), lon: Number(list[0].lon) } : null;
 }
 
-function drawPane() {
-  const pane = $('pane');
-  if (!pane) {
-    return;
+const winOf = (u) => desk.get(u ? u.mac : 'demo');
+
+function zoomWords(u) {
+  const w = winOf(u);
+  const s = u ? u.screen : hero;
+  if (w?.q('.zw')) {
+    const z = w.maxed ? s.zoomMost : Math.min(s.zoom, s.zoomMost);
+    w.q('.zw').textContent = `${z}x`;
+    w.q('.zo').disabled = z <= 1 || w.maxed;
+    w.q('.zi').disabled = z >= s.zoomMost || w.maxed;
   }
-  const u = app.cur;
-  const s = screenNow();
-  document.querySelectorAll('.tabs button').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === app.tab)));
-  if (app.tab === 'setup') {
+}
+
+function refit(u) {
+  const w = winOf(u);
+  if (w?.q('.gl')) {
+    fit(w.q('.gl'), u ? u.screen : hero, w.maxed);
+    zoomWords(u);
+  }
+}
+
+function zoomBy(u, step) {
+  const s = u ? u.screen : hero;
+  s.zoom = Math.max(1, Math.min(s.zoomMost, Math.min(s.zoom, s.zoomMost) + step));
+  refit(u);
+  remember();
+}
+
+addEventListener('resize', () => {
+  for (const u of [null, ...app.units]) {
+    refit(u);
+  }
+});
+
+function panePart(u, tab) {
+  const w = winOf(u);
+  const pane = w.q('.pane');
+  const s = u ? u.screen : hero;
+  w.body.querySelectorAll('.tabs button').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === tab)));
+  if (tab === 'setup') {
     if (!u) {
-      pane.innerHTML = '<small>The WiFi and your home go to a board. Connect one to set them.</small><button class="btn quiet" id="save">CONNECT A DEVICE</button>';
-      $('save').addEventListener('click', addBoard);
+      pane.innerHTML = '<small>The WiFi and your home go to a board. Connect one to set them.</small>';
       return;
     }
-    if (document.activeElement?.closest?.('#pane')) {
+    if (document.activeElement?.closest?.('.pane') === pane) {
       return;                                          // a board's answer must not wipe what is being typed
     }
     const nets = (u.nets ?? []).map((n) => `<div class="net"><span>${esc(n)}</span><button class="plain" data-forget="${esc(n)}">Forget</button></div>`).join('');
-    pane.innerHTML = `<div><label for="ssid">WiFi network</label><input type="text" id="ssid" autocomplete="off"></div>
-      <div><label for="pass">Password</label><input type="password" id="pass" autocomplete="off"></div>
+    pane.innerHTML = `<label>WiFi network<input type="text" class="ssid" autocomplete="off"></label>
+      <label>Password<input type="password" class="pass" autocomplete="off"></label>
       ${nets ? `<div class="nets"><span>Kept on the board</span>${nets}</div>` : ''}
-      <div><label for="home">Your town</label><input type="text" id="home" autocomplete="off" placeholder="a town, a postcode or a point"></div>
-      <button class="btn quiet" id="save">SEND TO THE BOARD</button>
-      <small id="saved">They go to the board over the cable, never to a server of ours. A town is looked up on OpenStreetMap.</small>`;
+      <label>Your town<input type="text" class="home" autocomplete="off" placeholder="a town, a postcode or a point"></label>
+      <button class="btn quiet save">SEND TO THE BOARD</button>
+      <small class="saved">They go to the board over the cable, never to a server of ours. A town is looked up on OpenStreetMap.</small>`;
     pane.querySelectorAll('[data-forget]').forEach((el) => {
-      el.addEventListener('click', () => {
-        say(`wifi forget "${el.dataset.forget}"`, 'cmd');
-        u.link?.send(`OWLOS SET ${JSON.stringify({ forget: el.dataset.forget })}`).then(() => u.link.send('OWLOS GET'));
-      });
+      el.addEventListener('click', () => term.run(`wifi forget --board ${short(u)} ${el.dataset.forget}`));
     });
-    $('save').addEventListener('click', async () => {
+    pane.querySelector('.save').addEventListener('click', async () => {
       const set = {};
-      const ssid = $('ssid').value.trim();
-      const town = $('home').value.trim();
+      const ssid = pane.querySelector('.ssid').value.trim();
+      const town = pane.querySelector('.home').value.trim();
       if (ssid) {
         set.ssid = ssid;
-        set.pass = $('pass').value;
-        say(`wifi join "${ssid}"`, 'cmd');
+        set.pass = pane.querySelector('.pass').value;
+        say(`wifi add ${ssid}`, 'cmd');
       }
       if (town) {
         const found = await findHome(town);
         if (!found) {
-          $('saved').textContent = `OpenStreetMap does not know "${town}".`;
+          pane.querySelector('.saved').textContent = `OpenStreetMap does not know "${town}".`;
           return;
         }
         Object.assign(set, found);
-        say(`home "${town}"`, 'cmd');
+        say(`home ${town}`, 'cmd');
       }
       if (Object.keys(set).length && u.link) {
         await u.link.send(`OWLOS SET ${JSON.stringify(set)}`);
         await u.link.send('OWLOS GET');
-        $('saved').textContent = 'Sent. The console below says how it goes.';
+        pane.querySelector('.saved').textContent = 'Sent. The console says how it goes: log on.';
       }
     });
-  } else if (app.tab === 'view') {
+  } else if (tab === 'view') {
     const c = s.cfg();
     const range = RANGES.reduce((best, r, i) => (Math.abs(r - c.range) < Math.abs(RANGES[best] - c.range) ? i : best), 0);
     const round = u && BOARDS[u.build].round;
     pane.innerHTML = `${round ? '' : `<div class="field"><span>Look</span><div class="chips">${LOOKS.map((l, i) => `<button class="chip" data-set="look=${l}" aria-pressed="${c.look === i}">${l.toUpperCase()}</button>`).join('')}</div></div>`}
       <div class="field"><span>Colours</span><div class="chips">${THEMES.map((t, i) => `<button class="chip" data-set="theme=${t}" aria-pressed="${c.theme === i}">${t.toUpperCase()}</button>`).join('')}</div></div>
-      <div><label for="range">Range: <b id="rangeword">${Math.round(c.range)}</b> km</label><input type="range" id="range" min="0" max="${RANGES.length - 1}" value="${range}"></div>
+      <label>Range: <b class="rangeword">${Math.round(c.range)}</b> km<input type="range" class="range" min="0" max="${RANGES.length - 1}" value="${range}"></label>
       <div class="field"><span>On the radar</span><div class="chips">${Object.entries(SWITCHES).map(([k, v]) => `<button class="chip" data-set="${k}=${s.opts[k] ? 'off' : 'on'}" aria-pressed="${!!s.opts[k]}">${v.toUpperCase()}</button>`).join('')}</div></div>`;
+    const apply = (name, value) => {
+      if (u) {
+        term.run(`set ${name}=${value} --board ${short(u)}`);
+      } else {
+        setOne(null, name, value);
+      }
+    };
     pane.querySelectorAll('[data-set]').forEach((el) => {
       el.addEventListener('click', () => {
-        if (u) {
-          term.run(`set ${el.dataset.set}`);
-        } else {
-          const [name, value] = el.dataset.set.split('=');
-          setOne(null, name, value);
-        }
+        const [name, value] = el.dataset.set.split('=');
+        apply(name, value);
       });
     });
-    $('range').addEventListener('input', (e) => {
-      $('rangeword').textContent = RANGES[e.target.value];
+    const slider = pane.querySelector('.range');
+    slider.addEventListener('input', () => {
+      pane.querySelector('.rangeword').textContent = RANGES[slider.value];
     });
-    $('range').addEventListener('change', (e) => {
-      const value = RANGES[e.target.value];
-      if (u) {
-        term.run(`set range=${value}`);
-      } else {
-        setOne(null, 'range', String(value));
-      }
-    });
+    slider.addEventListener('change', () => apply('range', RANGES[slider.value]));
   } else {
-    pane.innerHTML = `${u ? `<div><label for="rename">Name</label><input type="text" id="rename" autocomplete="off" value="${esc(u.name)}"></div>` : ''}
-      <dl class="facts">${facts().map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
-      <div class="row">${u ? '<button class="btn quiet" id="again">FLASH AGAIN</button><button class="plain" id="forget">Forget this board</button>' : '<button class="btn quiet" id="again">CONNECT A DEVICE</button>'}</div>`;
-    $('again').addEventListener('click', () => {
-      if (u) {
-        updateThen(u);
-      } else {
-        addBoard();
-      }
-    });
-    $('rename')?.addEventListener('change', (e) => {
+    pane.innerHTML = `${u ? `<label>Name<input type="text" class="rename" autocomplete="off" value="${esc(u.name)}"></label>` : ''}
+      <dl class="facts">${facts(u).map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+      ${u ? '<button class="plain forget">Forget this board</button><small class="forgetnote" hidden>Only this page forgets it: the firmware and its settings stay on the board, and + ADD A BOARD brings it back. Click again to forget it.</small>' : ''}`;
+    pane.querySelector('.rename')?.addEventListener('change', (e) => {
       u.name = e.target.value.trim() || u.name;
+      w.setTitle(u.name);
       remember();
       renderBar();
     });
-    $('forget')?.addEventListener('click', async () => {
+    pane.querySelector('.forget')?.addEventListener('click', async (e) => {
+      const note = pane.querySelector('.forgetnote');
+      if (note.hidden) {                               // the first click only says what it means
+        note.hidden = false;
+        e.target.textContent = 'Yes, forget this board';
+        return;
+      }
       if (u.link) {
         await u.link.close();
       }
       app.units = app.units.filter((v) => v !== u);
       remember();
+      desk.remove(u.mac);
       say(`board forget "${u.name}"`, 'cmd');
-      if (app.units.length) {
-        showAll();
-      } else {
-        app.cur = null;
-        app.view = null;
-        $('flow').hidden = true;
-        renderBar();
-      }
+      app.cur = null;
+      renderBar();
     });
   }
+}
+
+/* the settings of a board again: what it said changed them */
+function drawPane(u = app.cur) {
+  const w = winOf(u);
+  if (w?.q('.pane') && !w.q('.side').hidden) {
+    panePart(u, w.tab ?? 'view');
+  }
+}
+
+function fillBoard(u) {
+  const w = winOf(u);
+  if (u && !u.online) {
+    w.body.innerHTML = `<div class="gone"><p>Not connected. Plug it in and it comes back by itself, no questions asked.</p>
+      <dl class="facts">${facts(u).map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div>`;
+    return;
+  }
+  const round = u && BOARDS[u.build].round;
+  w.body.innerHTML = `<div class="bw"><div class="main"><div class="gl glass"></div>
+    <div class="zoom"><button class="zo" aria-label="smaller">-</button><span class="zw"></span><button class="zi" aria-label="bigger">+</button>
+    <button class="again settings">SETTINGS</button>${u ? '<button class="again flash">FLASH AGAIN</button>' : ''}</div>
+    <div class="livenote">${liveNote(u)}</div><div class="first"></div></div>
+    <div class="side" hidden><div class="tabs" role="tablist"><button role="tab" data-tab="setup">SETUP</button><button role="tab" data-tab="view">VIEW</button><button role="tab" data-tab="board">BOARD</button></div><div class="pane"></div></div></div>`;
+  const gl = w.q('.gl');
+  gl.classList.toggle('round', !!round);
+  gl.classList.toggle('yellow', !!(u && BOARDS[u.build].yellow));
+  gl.append((u ? u.screen : hero).canvas);
+  w.q('.zo').addEventListener('click', () => zoomBy(u, -1));
+  w.q('.zi').addEventListener('click', () => zoomBy(u, 1));
+  /* flashing is not a click to make by accident: the first one only asks */
+  const flash = w.q('.flash');
+  flash?.addEventListener('click', () => {
+    if (flash.classList.contains('armed')) {
+      clearTimeout(flash.calm);
+      updateThen(u);
+      return;
+    }
+    flash.classList.add('armed');
+    flash.textContent = 'SURE? CLICK AGAIN';
+    flash.calm = setTimeout(() => {
+      flash.classList.remove('armed');
+      flash.textContent = 'FLASH AGAIN';
+    }, 4000);
+  });
+  w.q('.settings').addEventListener('click', () => {
+    const side = w.q('.side');
+    side.hidden = !side.hidden;
+    w.tab = w.tab ?? (u && !u.wifi ? 'setup' : 'view');
+    drawPane(u);
+  });
+  w.body.querySelectorAll('.tabs button').forEach((t) => {
+    t.addEventListener('click', () => {
+      w.tab = t.dataset.tab;
+      drawPane(u);
+    });
+  });
+  refit(u);
+}
+
+function boardWin(u) {
+  const id = u ? u.mac : 'demo';
+  return desk.get(id) ?? desk.make(id, u ? u.name : 'The radar, a demo sky', {
+    onFront() {
+      if (app.cur !== (u ?? null)) {
+        app.cur = u ?? null;
+        app.view = u ? 'unit' : 'demo';
+        renderBar();
+      }
+    },
+    onClose: () => renderBar(),
+    onResize: () => refit(u),
+  });
 }
 
 async function showLive(u, justFlashed = false) {
   if (u) {
     await u.ready;
   }
+  desk.get('connect')?.hide();
   app.cur = u ?? null;
   app.view = u ? 'unit' : 'demo';
-  if (justFlashed) {
-    step(4);
-  } else {
-    manage();
+  const w = boardWin(u);
+  w.show();
+  fillBoard(u);
+  if (justFlashed && u?.online) {
+    w.q('.first').innerHTML = firstWords(u);
   }
-  if (u && !u.online) {
-    stage(`<h2>${esc(u.name)} is not connected</h2><p>Plug it in and it comes back by itself, no questions asked.</p>
-      <dl class="facts">${facts().map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`);
-    renderBar();
-    return;
-  }
-  app.tab = u && !u.wifi ? 'setup' : 'view';
-  const title = u ? (u.name === BOARDS[u.build].name ? `Your ${esc(u.name)} is running` : `${esc(u.name)}: ${esc(BOARDS[u.build].name)}`) : 'The radar, running in this page';
-  const s = stage(`<h2>${title}</h2><p>${u && BOARDS[u.build].round ? 'The same round screen as on the board: tap it for its menu.' : 'The same code as on the board.'}</p>
-    <div class="live"><div><div id="glass"></div>
-    <div class="zoom"><button id="zoomout" aria-label="smaller">-</button><span id="zoomword"></span><button id="zoomin" aria-label="bigger">+</button>
-    ${u ? '<button class="again" id="reflash">FLASH AGAIN</button>' : ''}</div>
-    <div id="livenote">${liveNote()}</div>${justFlashed && u ? firstWords(u) : ''}</div>
-    <div><div class="tabs" role="tablist"><button role="tab" data-tab="setup">SETUP</button><button role="tab" data-tab="view">VIEW</button><button role="tab" data-tab="board">BOARD</button></div>
-    <div class="pane" id="pane"></div></div></div>`);
-  mount($('glass'), screenNow(), u?.build);
-  $('zoomout').addEventListener('click', () => zoomBy(-1));
-  $('zoomin').addEventListener('click', () => zoomBy(1));
-  $('reflash')?.addEventListener('click', () => updateThen(u));
-  zoomWords();
-  s.querySelectorAll('.tabs button').forEach((t) => {
-    t.addEventListener('click', () => {
-      app.tab = t.dataset.tab;
-      drawPane();
-    });
-  });
-  drawPane();
+  w.front();
   renderBar();
-  $('flow').scrollIntoView();
+  desk.layout();
+  w.root.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+/* --- all your boards at once: every window open, and what goes for all of them --- */
+
+async function showAll() {
+  for (const u of app.units) {
+    const w = desk.get(u.mac);
+    if (!w || w.root.hidden) {
+      await showLive(u);
+    }
+  }
+  app.view = 'all';
+  app.cur = null;
+  const old = here().filter((u) => older(u.version, newest)).length;
+  const w = desk.get('all') ?? desk.make('all', 'On every board', { onClose: () => renderBar() });
+  w.body.innerHTML = `<div class="pane common"><div class="field"><span>Look</span><div class="chips">${LOOKS.map((l) => `<button class="chip" data-every="look=${l}">${l.toUpperCase()}</button>`).join('')}</div></div>
+    <div class="field"><span>Colours</span><div class="chips">${THEMES.map((t) => `<button class="chip" data-every="theme=${t}">${t.toUpperCase()}</button>`).join('')}</div></div>
+    ${old ? `<button class="btn quiet updateall">UPDATE ${old === 1 ? 'THE OLD ONE' : `ALL ${old}`} TO ${newest}</button>` : ''}</div>`;
+  w.body.querySelectorAll('[data-every]').forEach((el) => {
+    el.addEventListener('click', () => term.run(`set ${el.dataset.every} --all`));
+  });
+  w.q('.updateall')?.addEventListener('click', updateAll);
+  w.show();
+  renderBar();
 }
 
 /* --- what a click on the picture opens --- */
@@ -1215,11 +1255,11 @@ addEventListener('keydown', (e) => {
 
 function tickAll(now) {
   requestAnimationFrame(tickAll);
-  if (hero.m && (scene.isShown() || hero.canvas.isConnected)) {
+  if (hero.m && (scene.isShown() || (hero.canvas.isConnected && !desk.get('demo')?.root.hidden))) {
     hero.frame(now);
   }
   for (const u of app.units) {
-    if (u.screen.m && (u.screen.canvas.isConnected || (u === skyUnit && scene.isShown()))) {
+    if (u.screen.m && ((u.screen.canvas.isConnected && !desk.get(u.mac)?.root.hidden) || (u === skyUnit && scene.isShown()))) {
       u.screen.frame(now);
     }
   }
@@ -1255,23 +1295,15 @@ async function comeBack() {
     await wait(800);
     try {
       const { unit } = await tryPort(e.target);
-      if (unit && app.view === 'all') {
-        showAll();
-      } else if (unit && app.cur === unit) {
+      if (unit) {
         showLive(unit);
-      } else {
-        renderBar();
       }
     } catch (err) {
       console.warn(err);
     }
   });
-  if (here().length) {
-    if (app.units.length > 1) {
-      showAll();
-    } else {
-      showLive(app.units[0]);
-    }
+  for (const u of here()) {
+    await showLive(u);
   }
 }
 

@@ -15,7 +15,7 @@
   [hidden] { display: none !important; }
   html { background: var(--bg0); scroll-behavior: smooth; }
   body {
-    margin: 0; color: var(--focus); padding-bottom: 54px;
+    margin: 0; color: var(--focus); 
     font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     background: radial-gradient(1400px 700px at 50% -10%, var(--bg1), var(--bg0)) fixed;
   }
@@ -29,6 +29,7 @@
   }
   #barstate { flex: 0 1 auto; min-width: 0; }
   #barchips { display: flex; flex-wrap: wrap; gap: 5px; flex: 1 1 auto; }
+  .uchip#termhead { flex: none; }
   .uchip {
     display: inline-flex; align-items: center; gap: 6px; padding: 1px 9px; color: #03081a; background: none;
     border: 1.5px solid #03081a; border-radius: 5px; font: 700 13px var(--mono); cursor: pointer;
@@ -74,11 +75,11 @@
     display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(280px, 1fr); gap: 20px 44px; align-items: center;
     max-width: 1180px; margin: 0 auto; padding: 2px 16px 20px;
   }
-  .hero p { margin: 0; color: var(--dim); font-size: 18px; max-width: 62ch; }
-  .hero p b { color: var(--focus); font-weight: 600; }
   .cta { display: grid; gap: 6px; }
   .cta small { color: var(--dim); font-size: 14px; }
   .cta .plain { justify-self: start; }
+  .hero p { margin: 0; color: var(--dim); font-size: 18px; max-width: 62ch; }
+  .hero p b { color: var(--focus); font-weight: 600; }
 
   .btn {
     padding: 13px 18px; border: 1px solid var(--prim); border-radius: 8px; cursor: pointer;
@@ -90,7 +91,6 @@
   .btn:disabled { opacity: .5; cursor: default; filter: none; }
   .plain { padding: 0; color: var(--prim); background: none; border: 0; text-decoration: underline; cursor: pointer; font-size: 14px; }
 
-  #flow { max-width: 1180px; margin: 0 auto; padding: 8px 16px 28px; scroll-margin-top: 8px; }
   .glass { scroll-margin-top: 8px; }
   .steps { display: flex; gap: 6px; margin: 0 0 16px; padding: 0; list-style: none; font: 700 13px var(--mono); letter-spacing: 1px; }
   .steps li { flex: 1; padding: 8px 2px 0; color: #6b8fb2; border-top: 3px solid var(--line); }
@@ -119,8 +119,6 @@
   .flashing { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-family: var(--mono); }
   .flashing b { font-size: 30px; color: var(--prim); }
 
-  .live { display: grid; grid-template-columns: minmax(0, 1fr) 370px; gap: 18px; align-items: start; }
-  .live.stack { grid-template-columns: minmax(0, 1fr); }
 
   .screen { display: block; background: #000; touch-action: none; cursor: pointer; }
   .glass { width: fit-content; max-width: 100%; margin: 0 auto; }
@@ -131,18 +129,9 @@
     font: 700 18px var(--mono); cursor: pointer;
   }
   .zoom button:disabled { opacity: .35; cursor: default; }
-  .zoom button.again { width: auto; padding: 0 12px; margin-left: 14px; font-size: 13px; letter-spacing: 1px; }
   #livenote { text-align: center; }
   .glass.round .screen { border-radius: 50%; }
-  .tiles { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; }
-  .tile { flex: 1 1 auto; min-width: min(100%, 280px); display: flex; flex-direction: column; gap: 2px; padding: 12px; background: rgba(3, 8, 26, .55); border: 1px solid var(--line); border-radius: 10px; }
-  .tile h3 { margin: 0; font: 700 17px var(--mono); color: var(--focus); }
-  .tile > span { color: var(--dim); font-size: 13px; }
-  .tile .slot { display: grid; place-items: center; flex: 1; min-height: 230px; margin: 8px 0; }
 
-  .tile.off { border-style: dashed; }
-  .tile .gone { margin: 0; padding: 0 12px; color: var(--dim); text-align: center; font-size: 14px; }
-  .tile .btn { padding: 7px 12px; font-size: 13px; }
   .common { padding-top: 6px; }
   .nets { font-size: 14px; color: var(--dim); }
   .net { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; color: var(--focus); }
@@ -177,22 +166,48 @@
 
   footer p { margin: 0 0 8px; }
   .credits { font-size: 13px; line-height: 1.5; }
-  #term { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; color: #cfe7f7; background: #000; font: 14px/1.45 var(--mono); }
-  #termhead { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 16px; color: inherit; background: none; border: 0; font: inherit; text-align: left; cursor: pointer; }
-  #termlast { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #7f9bb5; }
-  #termhead em { flex: none; color: #7f9bb5; font-style: normal; font-size: 13px; }
-  #termbody { height: 38.2vh; padding: 2px 16px 8px; overflow: auto; cursor: text; }
+  #termbody { height: 100%; min-height: 240px; padding: 4px 10px 8px; overflow: auto; cursor: text; color: #cfe7f7; background: #000; font: 14px/1.45 var(--mono); }
+  #desk { position: relative; z-index: 5; margin: 6px 16px 0; }
+  .win { position: absolute; display: flex; flex-direction: column; width: max-content; max-width: calc(100vw - 32px); background: #071a35; border: 1px solid #2c6a9c; border-radius: 8px; box-shadow: 0 10px 34px rgba(0, 0, 0, .5); }
+  .win { scroll-margin: 54px 0 12px; }
+  .win.wide { width: min(1120px, calc(100vw - 32px)); }
+  .win.console { width: min(860px, calc(100vw - 32px)); }
+  .win.console .winbody { height: 38.2vh; padding: 0; resize: vertical; overflow: hidden; border-radius: 0 0 7px 7px; }
+  .win.console #termbody { border-radius: 0 0 7px 7px; }
+  .win.maxed { position: fixed; left: 12px !important; right: 12px; top: 44px !important; bottom: 12px; width: auto; max-width: none; }
+  .win.maxed .winbody { flex: 1; overflow: auto; }
+  .win.maxed.console .winbody { height: auto; resize: none; }
+  .winbar { display: flex; align-items: center; gap: 2px; padding: 3px 4px 3px 12px; background: #0d2a52; border-radius: 7px 7px 0 0; cursor: grab; touch-action: none; user-select: none; }
+  .wintitle { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 700 14px var(--mono); color: var(--focus); }
+  .winbtn { width: 30px; height: 26px; padding: 0; color: var(--dim); background: none; border: 0; border-radius: 4px; font: 400 16px/1 system-ui, sans-serif; cursor: pointer; }
+  .winbtn:hover { color: var(--focus); background: rgba(92, 225, 255, .16); }
+  .winbtn.close:hover { color: #fff; background: #c42b1c; }
+  .winbody { padding: 12px; }
+  .bw { display: flex; flex-wrap: nowrap; gap: 16px; align-items: flex-start; }
+  .bw .main { flex: none; max-width: 100%; }
+  .bw .side { flex: none; width: 340px; }
+  .gone { max-width: 320px; color: var(--dim); }
+  .gone p { margin: 0 0 10px; }
+  .zoom button.flash { color: var(--warn); background: rgba(255, 184, 72, .1); border-color: var(--warn); }
+  .zoom button.flash.armed { color: #03081a; background: var(--warn); }
+  .again { width: auto !important; padding: 0 12px !important; font-size: 13px !important; letter-spacing: 1px; }
   #termlog div { min-height: 1.45em; white-space: pre-wrap; overflow-wrap: anywhere; }
   #termline { display: flex; }
   #termprompt { flex: none; white-space: pre; }
   #termin { flex: 1; min-width: 0; padding: 0; color: #fff; background: none; border: 0; outline: none; font: inherit; caret-color: #7dffa8; }
-  body.termopen { padding-bottom: calc(38.2vh + 34px); }
+
   @media (max-width: 719px) {
+    #desk { margin: 6px 12px 0; }
+    .win { position: static !important; width: auto; max-width: none; margin-bottom: 12px; }
+    .bw { flex-direction: column; }
+    .bw .side { width: 100%; }
+
     .legend { display: block; }
     #hint { top: 8px; left: 16px; }
     #info { position: fixed; left: 8px !important; right: 8px; top: auto !important; bottom: 8px; width: auto; }
   }
   @media (max-width: 860px) {
+    .hero { grid-template-columns: minmax(0, 1fr); }
     .hero, .live { grid-template-columns: minmax(0, 1fr); }
     .hero p { font-size: 16px; }
     .steps { font-size: 11px; letter-spacing: 0; }
@@ -205,6 +220,7 @@
 <div id="bar">
   <div id="barstate"></div>
   <div id="barchips"></div>
+  <button class="uchip" id="termhead" aria-pressed="false" title="Ctrl+`">CONSOLE</button>
 </div>
 
 <header class="top">
@@ -237,12 +253,7 @@
   </div>
 </section>
 
-<section id="flow" hidden>
-  <ol class="steps" id="steps">
-    <li>1 CONNECT</li><li>2 YOUR BOARD</li><li>3 FLASH</li><li>4 LIVE</li>
-  </ol>
-  <div id="stage"></div>
-</section>
+<div id="desk"></div>
 
 <footer>
   <p>Looking for the page you know, with every firmware version and the full guide? <a href="previous/">Previous page</a>.</p>
@@ -259,14 +270,9 @@
     Flashing: <a href="https://github.com/espressif/esptool-js">esptool-js</a>, Apache 2.0.</p>
 </footer>
 
-<div id="term">
-  <button id="termhead" aria-expanded="false" aria-controls="termbody">
-    <span id="termlast"></span><em id="termhint">open the console, Ctrl+`</em>
-  </button>
-  <div id="termbody" hidden>
-    <div id="termlog"></div>
-    <div id="termline"><span id="termprompt"></span><input id="termin" aria-label="a command" autocomplete="off" spellcheck="false"></div>
-  </div>
+<div id="termbody" hidden>
+  <div id="termlog"></div>
+  <div id="termline"><span id="termprompt"></span><input id="termin" aria-label="a command" autocomplete="off" spellcheck="false"></div>
 </div>
 
 <script src="radar/twin.js"></script>

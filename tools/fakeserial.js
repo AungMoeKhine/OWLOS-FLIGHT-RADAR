@@ -66,7 +66,7 @@
             this.line('OWLOS SKY END 3');
           };
           answer();
-          this.sky = setInterval(answer, 2000);
+          this.sky = setInterval(answer, 15000);
         } else if (l.startsWith('OWLOS SET ')) {
           this.line('OWLOS OK');
         }
