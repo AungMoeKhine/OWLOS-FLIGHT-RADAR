@@ -112,7 +112,10 @@ enum {
 
 /* the WiFi page with its keyboard: square screens with touch. the round glass is too small for
  * a keyboard and the RPi LCD has no touch: the site sends the WiFi there */
-#define UI_WIFI_PAGE (RADAR_HAS_TOUCH && !RADAR_ROUND)
+#ifndef RADAR_WEB
+#define RADAR_WEB 0                                    /* web/: the screen in a page, the board has the WiFi */
+#endif
+#define UI_WIFI_PAGE (RADAR_HAS_TOUCH && !RADAR_ROUND && !RADAR_WEB)
 
 #define D2R (3.14159265f / 180.0f)
 #define BEAM_TURN_MS 6000u    /* the sweep goes round once in this */

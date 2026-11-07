@@ -147,8 +147,8 @@ static void *iram_first(size_t bytes)
 {
 #if CONFIG_IDF_TARGET_ESP32
     return heap_caps_malloc(bytes, MALLOC_CAP_EXEC | MALLOC_CAP_32BIT);
-#elif DISP_LCD_RGB
-    return heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM);  // the 5": 190 KB, there is no such room in the RAM
+#elif DISP_LCD_RGB || CONFIG_IDF_TARGET_ESP32C5
+    return heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM);  // the 5": 190 KB, no such room in the RAM. the C5: 38 KB the strips want
 #else
     (void)bytes;
     return NULL;                                       // the C3's RAM is one: malloc does it
@@ -478,6 +478,51 @@ static void watch_lookup(sky_reader_t *rd, int planes_server)
     ESP_LOGI(TAG, "watch %s: %s by %s, %s%s%s", id, FREE_NAME[server], WATCH_KIND[kind], how, said[0] ? ": " : "", said);
 }
 
+/* --- the page's radar (web/): while it asks, each answer goes out over the console too, a line a
+ * plane in the free networks' own words, so its sky_read takes them as they are. a line each: a
+ * list in one piece is more than the 3.5" has to spare, and the log may fall between lines. the
+ * page says OWLOS SKY ON every half minute: a page that went away stops it by itself --- */
+#define SKY_OUT_MS 60000u
+static volatile uint32_t s_sky_until;                  // now_ms till which it goes out
+static volatile uint32_t s_pick;                       // OWLOS PICK from the page: the plane picked there
+static volatile int      s_pick_new;
+static uint32_t          s_sel_told;                   // the picked plane the page knows of
+
+static int page_there(void) { return (int32_t)(s_sky_until - now_ms()) > 0; }
+
+static void sky_out(void)
+{
+    static const char *const CATEGORY[KINDS] = {
+        [KIND_JET] = "A3", [KIND_LIGHT] = "A1", [KIND_BIZJET] = "A2", [KIND_HEAVY] = "A5", [KIND_FAST] = "A6",
+        [KIND_HELI] = "A7", [KIND_GLIDER] = "B1", [KIND_BALLOON] = "B2", [KIND_DRONE] = "B6", [KIND_GROUND] = "C1",
+    };
+    static plane_t p;                                  // only this task: off its stack
+    char server[sizeof s_server];
+    if (!page_there()) return;
+    lock();
+    int n = s_sky.n, total = s_sky.total;
+    snprintf(server, sizeof server, "%s", s_server);
+    unlock();
+    printf("OWLOS SKY BEGIN %s\n", server);
+    for (int i = 0; i < n; i++) {
+        lock();
+        int here = i < s_sky.n;
+        if (here) p = s_sky.p[i];
+        unlock();
+        if (!here) break;
+        char alt[16];
+        if (p.ground) snprintf(alt, sizeof alt, "\"ground\"");
+        else snprintf(alt, sizeof alt, "%d", (int)p.alt);
+        printf("OWLOS PLANE {\"hex\":\"%06x\",\"flight\":\"%s\",\"r\":\"%s\",\"t\":\"%s\",\"category\":\"%s\",\"lat\":%.5f,\"lon\":%.5f,"
+               "\"alt_baro\":%s,\"gs\":%.1f,\"track\":%.1f,\"baro_rate\":%d,\"squawk\":\"%04d\",\"seen_pos\":%.1f,"
+               "\"nav_altitude_mcp\":%d,\"nav_heading\":%d,\"ias\":%d,\"mach\":%.3f,\"wd\":%d,\"ws\":%d}\n",
+               (unsigned)p.icao, p.flight, p.reg, p.type, CATEGORY[p.kind < KINDS ? p.kind : KIND_JET], (double)p.lat, (double)p.lon,
+               alt, (double)p.gs, (double)p.track, (int)p.vrate, (int)p.squawk, (double)(now_ms() - p.seen) / 1000.0,
+               p.sel_fl * 100, (int)p.sel_hdg, (int)p.ias, (double)p.mach / 1000.0, (int)p.wind_dir, (int)p.wind_kt);
+    }
+    printf("OWLOS SKY END %d\n", total);
+}
+
 static void fetch_task(void *arg)
 {
     (void)arg;
@@ -535,6 +580,7 @@ static void fetch_task(void *arg)
                 s_fetched = now;
                 unlock();
                 free(buf);
+                sky_out();
             }
             if (configured) every = 1000;              // the WiFi set may come back any moment: look each second
         } else if (!up) {
@@ -591,6 +637,7 @@ static void fetch_task(void *arg)
             sky_forget(&s_sky, now);
             int planes = s_sky.n;
             unlock();
+            if (n >= 0) sky_out();
             if (!fr24 && n < 0) next = (server + 1) % FREE_SERVERS;   // that one failed: the next one next time
             else if (!fr24) next = server;
             ESP_LOGI(TAG, "%s: HTTP %d, %d bytes in %d ms, %d planes in it, %d kept, %d on the list, heap %u, at least %u since power on",
@@ -635,7 +682,8 @@ static void say_cfg(void)
            "\"vectors\":%d,\"beam_step\":%d,\"clock\":%d,\"block\":%d,\"autopilot\":%d,\"lost\":%d,\"conflict\":%d,"
            "\"fl_lo\":%d,\"fl_hi\":%d,\"utc\":%u,"
            "\"led\":%d,\"led_level\":%d,\"led_hold\":%d,\"led_near\":%d,\"led_red\":%d,\"version\":\"%s\",\"newest\":\"%s\","
-           "\"uptime\":%u,\"ran\":%u,\"reset\":\"%s\",\"screen\":%d}\n",
+           "\"uptime\":%u,\"ran\":%u,\"reset\":\"%s\",\"screen\":%d,"
+           "\"range\":%.2f,\"dist_unit\":%d,\"alt_unit\":%d,\"labels\":%d}\n",
            json_esc(s_sec.ssid, ssid, sizeof ssid), (double)s_cfg.lat, (double)s_cfg.lon,
            json_esc(s_cfg.place, place, sizeof place), json_esc(s_cfg.country, country, sizeof country),
            s_cfg.source == SRC_FR24 ? "fr24" : "free", s_sec.key[0] ? "true" : "false", s_cfg.up, s_cfg.flip,
@@ -643,7 +691,8 @@ static void say_cfg(void)
            s_opt.block, s_opt.autopilot, s_opt.lost, s_opt.conflict, s_opt.fl_lo, s_opt.fl_hi,
            (unsigned)net_utc(), led, s_light_cfg.level, s_light_cfg.hold,
            light_near_units(&s_light_cfg), light_red_gpio(&s_light_cfg), FLIGHT_VERSION, s_newest,
-           (unsigned)(now_ms() / 1000u), (unsigned)s_ran_s, s_reset, s_screen);
+           (unsigned)(now_ms() / 1000u), (unsigned)s_ran_s, s_reset, s_screen,
+           (double)s_cfg.range, s_cfg.dist_unit, s_cfg.alt_unit, s_cfg.labels);
     unlock();
 }
 
@@ -651,6 +700,18 @@ static void on_line(const char *line)
 {
     if (!strncmp(line, "OWLOS HELLO", 11)) { printf("OWLOS READY flight-radar %s\n", FLIGHT_VERSION); return; }
     if (!strncmp(line, "OWLOS GET", 9)) { say_cfg(); return; }
+    if (!strcmp(line, "OWLOS SKY ON")) {               // the page's radar, see sky_out
+        int was = page_there();
+        s_sky_until = now_ms() + SKY_OUT_MS;
+        if (!was) xTaskNotifyGive(s_fetch);            // the first answer now, not in five seconds
+        return;
+    }
+    if (!strcmp(line, "OWLOS SKY OFF")) { s_sky_until = now_ms(); return; }
+    if (!strncmp(line, "OWLOS PICK ", 11)) {           // a plane tapped on the page, 0: let go
+        s_pick = (uint32_t)strtoul(line + 11, NULL, 16);
+        s_pick_new = 1;
+        return;
+    }
     if (strncmp(line, "OWLOS SET ", 10)) return;
     const char *j = line + 10;
     secrets_t sec;
@@ -680,6 +741,11 @@ static void on_line(const char *line)
     if (json_num(j, "look", &v) && v >= 0 && v < LOOKS) c.look = (uint8_t)v;
     if (json_num(j, "map", &v)) c.map = v != 0;
     if (json_num(j, "ground", &v)) c.ground = v != 0;
+    // what the page's radar changes besides those
+    if (json_num(j, "range", &v) && v >= RANGE_MIN && v <= RANGE_MAX) c.range = (float)v;
+    if (json_num(j, "dist_unit", &v) && v >= 0 && v <= DIST_MI) c.dist_unit = (uint8_t)v;
+    if (json_num(j, "alt_unit", &v) && v >= 0 && v <= ALT_M) c.alt_unit = (uint8_t)v;
+    if (json_num(j, "labels", &v)) c.labels = v != 0;
     scope_opt_t opt;                                   // the radar's options
     lock();
     opt = s_opt;
@@ -907,7 +973,8 @@ static void ui_task(void *arg)
     disp_init();
     uint32_t *work = heap_caps_malloc(GFX_PW * DISP_STRIP * sizeof(uint32_t), MALLOC_CAP_INTERNAL);
     if (!work || !ui_init(&s_ui, now_ms())) {
-        ESP_LOGE(TAG, "not enough memory for the screen, free heap %u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT));
+        ESP_LOGE(TAG, "not enough memory for the screen: RAM %u free, %u in one piece, heap %u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT));
         vTaskDelete(NULL);
     }
     ui_set_cfg(&s_ui, &c);
@@ -1056,6 +1123,17 @@ static void ui_task(void *arg)
             s_opt = s_ui.opt;
             unlock();
             store_save_opt(&s_ui.opt);
+        }
+        if (s_pick_new) {                              // tapped on the page: picked here too
+            s_pick_new = 0;
+            s_ui.sel = s_sel_told = s_pick;
+        }
+        if (page_there()) {                            // and what a finger did here goes there
+            if (cmd.cfg || cmd.opt) say_cfg();
+            if (s_ui.sel != s_sel_told) {
+                s_sel_told = s_ui.sel;
+                printf("OWLOS SEL %06x\n", (unsigned)s_ui.sel);
+            }
         }
         uint8_t rgb[3];
         lock();

@@ -4,6 +4,8 @@
 
 **Flash it from the browser: [kirindenis.github.io/OWLOS-FLIGHT-RADAR](https://kirindenis.github.io/OWLOS-FLIGHT-RADAR/)**
 
+**Try it in your browser: [the radar in a page](https://kirindenis.github.io/OWLOS-FLIGHT-RADAR/radar/)**, a demo sky, or your own board's planes over the USB cable.
+
 Questions, ideas, a photo of your board: [our group on Facebook](https://www.facebook.com/groups/OWLOS).
 
 [![What it does and what 0.6 added: on this frame an emergency round home blinks the RGB LED red](shots/promo.png)](https://kirindenis.github.io/OWLOS-FLIGHT-RADAR/shots/promo.mp4)
@@ -289,6 +291,9 @@ and a PC preview.
   as its `site-fw` artifact for 90 days. 0.2 and 0.3 came before the site kept versions: they come
   once from the runs that built them, `.github/archive-seed.txt`.
 - `tools/QrBake` (.NET 8) writes the site's address and its QR code into `core/qr_site.h` and `.c`.
+- `web/BUILD.BAT` (Emscripten in `C:\emsdk`) builds `core/` for WebAssembly: `web/index.html` is the radar
+  in a web page, the 5" layout. A demo sky till a board is connected over Web Serial, then the board's
+  planes, and what a finger does on either side goes to the other. Serve that folder with any web server.
 - `tools/preview/BUILD.BAT <screen>` (Visual Studio 2022) draws every page on the PC into `shots/`.
   `TOUR.BAT` films the how-to tour, `GIF.BAT` makes the GIF above from it (both with ffmpeg).
 - `tools/Guide/GUIDE.BAT` (.NET 8) puts the arrows on the shots: `shots/guide/`, from `notes.txt`.

@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OWLOS Flight Radar in the browser</title>
+<meta name="description" content="The flight radar's own screen code running in a web page.">
+<style>
+  :root {
+    --bg0: #03081a; --bg1: #0a1a36; --line: #1d4a78; --prim: #5ce1ff; --focus: #eaf7ff; --dim: #8fb2d2; --bad: #ff6070;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg0); }
+  body {
+    margin: 0; color: var(--focus);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(1200px 600px at 50% -10%, var(--bg1), var(--bg0)) fixed;
+  }
+  a { color: var(--prim); }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 24px 16px 40px; }
+  h1 {
+    margin: 0; font: 700 28px/1.2 "Cascadia Mono", Consolas, monospace; letter-spacing: 1px;
+    color: var(--prim); text-shadow: 0 0 18px rgba(92, 225, 255, .35);
+  }
+  p { margin: 8px 0 0; color: var(--dim); }
+  canvas {
+    display: block; width: 100%; height: auto; margin-top: 16px; aspect-ratio: 5 / 3; background: #000;
+    border: 1px solid var(--line); border-radius: 8px; touch-action: none; cursor: pointer;
+  }
+  #state { min-height: 24px; }
+  #state.bad { color: var(--bad); }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
+  button {
+    padding: 8px 16px; color: var(--prim); background: rgba(92, 225, 255, .08); border: 1px solid var(--prim);
+    border-radius: 8px; font: 700 15px "Cascadia Mono", Consolas, monospace; letter-spacing: 1px; cursor: pointer;
+  }
+  button:hover { background: rgba(92, 225, 255, .18); }
+  button:disabled { opacity: .5; cursor: default; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>OWLOS Flight Radar</h1>
+  <p>The radar's own screen code, running in this page. Tap a plane, drag the rim to turn the map, drag inside to
+     zoom. A demo sky till you connect a board: then these are its planes, over the USB cable.</p>
+  <canvas id="screen" width="800" height="480" aria-label="the radar's screen"></canvas>
+  <div class="row">
+    <button id="connect" disabled>CONNECT A BOARD</button>
+    <a href="https://kirindenis.github.io/OWLOS-FLIGHT-RADAR/">Flash a board</a>
+  </div>
+  <p id="state">Starting.</p>
+  <p>Nothing goes to a server of ours: the planes come over the cable, the map's tiles from OpenStreetMap. Needs Chrome
+     or Edge on a computer.</p>
+</div>
+<script src="twin.js"></script>
+<script>
+'use strict';
+const canvas = document.getElementById('screen');
+const stateLine = document.getElementById('state');
+const connectButton = document.getElementById('connect');
+const pen = canvas.getContext('2d');
+
+function say(text, bad) {
+  stateLine.textContent = text;
+  stateLine.className = bad ? 'bad' : '';
+}
+
+/* the pointer is the finger: where it is on the canvas, in the screen's pixels */
+const finger = { down: 0, pressed: 0, x: 0, y: 0 };   // pressed: a press a slow frame must not miss
+
+function follow(e) {
+  const box = canvas.getBoundingClientRect();
+  finger.x = Math.round((e.clientX - box.left) * canvas.width / box.width);
+  finger.y = Math.round((e.clientY - box.top) * canvas.height / box.height);
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  follow(e);
+  finger.down = 1;
+  finger.pressed = 1;
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (finger.down) {
+    follow(e);
+  }
+});
+for (const name of ['pointerup', 'pointercancel']) {
+  canvas.addEventListener(name, () => {
+    finger.down = 0;
+  });
+}
+
+/* the map's tiles: the wasm says what it wants, these go and get them, a few at a time */
+async function fetchTile(m, k) {
+  const url = m.UTF8ToString(m._twin_map_url(k));
+  if (!url) {
+    return 0;
+  }
+  const answer = await fetch(url);
+  if (!answer.ok) {
+    return 0;
+  }
+  const bytes = new Uint8Array(await answer.arrayBuffer());
+  const at = m._malloc(bytes.length);
+  m.HEAPU8.set(bytes, at);
+  const read = m._twin_map_tile(k, at, bytes.length);
+  m._free(at);
+  return read;
+}
+
+async function makeMap(m, tiles) {
+  let next = 0;
+  let read = 0;
+  async function worker() {
+    while (next < tiles) {
+      const k = next++;
+      try {
+        const got = await fetchTile(m, k);
+        read += got;
+      } catch (e) {
+        console.warn('tile', k, e);
+      }
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  m._twin_map_end();
+  console.log('map:', read, 'of', tiles, 'tiles');
+}
+
+let live = null;                                       // the connected board, null: the demo sky
+
+/* a finger here changed something: the board does the same. it does not say it back */
+function tellBoard(m) {
+  const what = m._twin_changed();
+  if (!live || !what) {
+    return;
+  }
+  if (what & 1) {
+    live.send('OWLOS SET ' + m.UTF8ToString(m._twin_set_json())).catch((e) => console.warn(e));
+  }
+  if (what & 2) {
+    live.send('OWLOS PICK ' + (m._twin_sel() >>> 0).toString(16)).catch((e) => console.warn(e));
+  }
+}
+
+/* the board on the serial port: the same lines as the site's step 2, and the planes on top */
+class Link {
+  constructor(m, now) {
+    this.m = m;
+    this.now = now;
+    this.encoder = new TextEncoder();
+    this.lines = [];
+    this.answers = 0;
+    this.writing = Promise.resolve();
+  }
+
+  call(fn, ...args) {                                  // strings go in as C strings
+    const held = [];
+    const out = args.map((a) => {
+      if (typeof a !== 'string') {
+        return a;
+      }
+      const at = this.m.stringToNewUTF8(a);
+      held.push(at);
+      return at;
+    });
+    const result = fn(...out);
+    held.forEach((at) => this.m._free(at));
+    return result;
+  }
+
+  async open() {
+    this.port = await navigator.serial.requestPort();
+    await this.port.open({ baudRate: 115200, bufferSize: 65536 });
+    // both lines released: the board runs (on the CYD this may restart it, it then says READY anyway)
+    await this.port.setSignals({ dataTerminalReady: false, requestToSend: false });
+    this.reader = this.port.readable.getReader();
+    this.pumping = this.pump();
+  }
+
+  async pump() {
+    const decoder = new TextDecoder();
+    let text = '';
+    try {
+      for (;;) {
+        const { value, done } = await this.reader.read();
+        if (done) {
+          break;
+        }
+        text += decoder.decode(value, { stream: true });
+        let i;
+        while ((i = text.indexOf('\n')) >= 0) {
+          const line = text.slice(0, i).replace(/\r$/, '').replace(/\x1b\[[0-9;]*m/g, '');
+          text = text.slice(i + 1);
+          this.take(line);
+        }
+      }
+    } catch (e) {
+      console.warn('the port went away', e);
+    }
+    this.lost?.();
+  }
+
+  // a line from the board. the log goes by between them
+  take(line) {
+    if (line.startsWith('OWLOS SKY BEGIN ')) {
+      this.call(this.m._twin_sky_begin, this.now(), line.slice(16));
+      this.inAnswer = true;
+    } else if (line.startsWith('OWLOS PLANE ')) {
+      if (this.inAnswer) {
+        this.call(this.m._twin_sky_plane, line.slice(12));
+      }
+    } else if (line.startsWith('OWLOS SKY END ')) {
+      if (this.inAnswer) {
+        this.m._twin_sky_end(this.now(), parseInt(line.slice(14), 10) || 0);
+        this.inAnswer = false;
+        this.answers++;
+        this.onAnswer?.();
+      }
+    } else if (this === live && line.startsWith('OWLOS CFG ')) {
+      this.show(JSON.parse(line.slice(10)));           // a finger on the board changed something
+    } else if (this === live && line.startsWith('OWLOS SEL ')) {
+      this.m._twin_pick(parseInt(line.slice(10), 16) || 0);
+    } else if (this !== live && line.startsWith('OWLOS ')) {
+      this.lines.push(line);
+    }
+  }
+
+  // a newline first: bytes garbled while the board restarts at connect would otherwise glue onto the
+  // command. one at a time: the port has one writer
+  send(line) {
+    this.writing = this.writing.then(async () => {
+      const writer = this.port.writable.getWriter();
+      await writer.write(this.encoder.encode('\n' + line + '\n'));
+      writer.releaseLock();
+    });
+    return this.writing;
+  }
+
+  async expect(prefix, ms) {
+    const until = Date.now() + ms;
+    while (Date.now() < until) {
+      const i = this.lines.findIndex((l) => l.startsWith(prefix));
+      if (i >= 0) {
+        return this.lines.splice(i, 1)[0];
+      }
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    return null;
+  }
+
+  // what it says of itself: how the page shows it from now on
+  show(c) {
+    this.call(this.m._twin_cfg, c.lat, c.lon, c.place || 'HOME', c.country || '', c.range, c.up, c.theme, c.look, c.map,
+              c.ground, c.dist_unit, c.alt_unit, c.labels);
+    this.m._twin_opt(c.vectors, c.beam_step, c.clock, c.block, c.autopilot, c.lost, c.conflict, c.fl_lo, c.fl_hi);
+  }
+
+  async close() {
+    this.lost = null;
+    clearInterval(this.keep);
+    try {
+      await this.send('OWLOS SKY OFF');
+    } catch (e) {
+      console.warn(e);
+    }
+    try {
+      await this.reader.cancel();
+      await this.pumping;
+      this.reader.releaseLock();
+      await this.port.close();
+    } catch (e) {
+      console.warn(e);
+    }
+  }
+}
+
+function wireButton(m, now) {
+  if (!('serial' in navigator)) {
+    say('A demo sky. This browser has no Web Serial: use Chrome or Edge on a computer to connect a board.');
+    return;
+  }
+  let link = null;
+  function back(text, bad) {
+    link = null;
+    live = null;
+    m._twin_board(0);
+    connectButton.textContent = 'CONNECT A BOARD';
+    say(text, bad);
+  }
+  async function connect() {
+    const l = new Link(m, now);
+    try {
+      await l.open();
+    } catch (e) {
+      say(e.name === 'NotFoundError' ? 'No port was picked. A demo sky.' : 'Could not open the port: ' + e.message, e.name !== 'NotFoundError');
+      return;
+    }
+    say('Looking for the Flight Radar on the board...');
+    let ready = null;
+    for (let t = 0; t < 14 && !ready; t++) {           // a board that just restarted needs a second or two
+      await l.send('OWLOS HELLO');
+      ready = await l.expect('OWLOS READY', 800);
+    }
+    if (!ready || !ready.startsWith('OWLOS READY flight-radar')) {
+      await l.close();
+      say('The board did not answer as a Flight Radar. Is it flashed? Is it the right port?', true);
+      return;
+    }
+    await l.send('OWLOS GET');
+    const cfg = await l.expect('OWLOS CFG ', 3000);
+    if (!cfg) {
+      await l.close();
+      say('The board did not say what it has.', true);
+      return;
+    }
+    const c = JSON.parse(cfg.slice(10));
+    if (c.range === undefined) {
+      await l.close();
+      say('This board runs firmware older than this page: flash the newest one.', true);
+      return;
+    }
+    m._twin_board(1);
+    l.show(c);
+    await l.send('OWLOS SKY ON');
+    l.keep = setInterval(() => {
+      l.send('OWLOS SKY ON').catch((e) => console.warn(e));
+    }, 30000);
+    l.lost = () => back('The board went away. A demo sky.', true);
+    l.onAnswer = () => say('Connected to the board, firmware ' + c.version + '. Its answers so far: ' + l.answers + '.');
+    link = l;
+    live = l;
+    connectButton.textContent = 'DISCONNECT';
+    say('Connected to the board, firmware ' + c.version + '. Waiting for its planes.');
+  }
+  connectButton.disabled = false;
+  connectButton.addEventListener('click', async () => {
+    connectButton.disabled = true;
+    try {
+      if (link) {
+        const l = link;
+        await l.close();
+        back('Disconnected. A demo sky.');
+      } else {
+        await connect();
+      }
+    } finally {
+      connectButton.disabled = false;
+    }
+  });
+}
+
+Twin().then((m) => {
+  const started = performance.now();
+  const now = () => Math.round(performance.now() - started) + 1;
+  if (!m._twin_init(now())) {
+    say('No memory for the screen.', true);
+    return;
+  }
+  const w = m._twin_width();
+  const h = m._twin_height();
+  say('Running. A demo sky, no board connected.');
+  function frame() {
+    const at = m._twin_frame(now(), Math.floor(Date.now() / 1000), finger.down || finger.pressed, finger.x, finger.y);
+    finger.pressed = 0;
+    pen.putImageData(new ImageData(new Uint8ClampedArray(m.HEAPU8.buffer, at, w * h * 4), w, h), 0, 0);
+    tellBoard(m);
+    const tiles = m._twin_map_wanted();
+    if (tiles) {
+      makeMap(m, tiles);
+    }
+  }
+  function run() {
+    frame();
+    requestAnimationFrame(run);
+  }
+  window.twinFrame = frame;                            // a test can step it: a hidden tab gets one frame a second
+  window.twinLink = () => new Link(m, now);            // and feed it a board's lines
+  wireButton(m, now);
+  run();
+}).catch((e) => {
+  say('It did not start: ' + e, true);
+});
+</script>
+</body>
+</html>

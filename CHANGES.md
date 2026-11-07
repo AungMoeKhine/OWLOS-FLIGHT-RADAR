@@ -4,6 +4,14 @@ What changed in each version of OWLOS Flight Radar, the newest first. The first 
 version: the firmware is built with it, the site publishes it, and a board compares its own with it.
 The site keeps the firmware of each version: a new number here keeps the one before it as it was.
 
+## 0.7
+
+- The radar in your browser, on the site's radar page: the same screen code as on the board. A demo sky at
+  first. Connect a board over USB in Chrome or Edge and the page shows its planes, and a tap on either side
+  goes to the other: the look, the colours, the range, turning the map, the options, the picked plane.
+- The NM-CYD-C5 ran out of the chip's own RAM when its screen started, on the first real board. The map's
+  picture, TLS and the WiFi's buffers now lie in its PSRAM.
+
 ## 0.6
 
 - The radar look has its small ring back. The pin stays on the two maps, where it is needed.

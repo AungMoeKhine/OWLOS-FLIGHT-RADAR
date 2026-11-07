@@ -13,7 +13,7 @@ on the site; none of the built ones here has been run on that board yet unless i
   ST7789 with its reset and backlight behind a CH32V003 co-processor and a CST3530 touch: not built.
 - Missing: which board it is.
 
-## NM-CYD-C5: built 2026-11-03, not run on one yet
+## NM-CYD-C5: built 2026-11-03, first run by a tester 2026-11-06
 
 - A 2.8" board in the CYD's form: ESP32-C5-WROOM-1 N16R8 (16 MB flash, 8 MB quad PSRAM), ST7789
   320x240, XPT2046 resistive touch, two USB-C: one through a CH340C to UART0 (TX 11, RX 12), one the
@@ -28,6 +28,9 @@ on the site; none of the built ones here has been run on that board yet unless i
 - Built with: no inversion (every source agrees), landscape MADCTL 0xA0, RGB first and BGR as the
   second screen profile (the maker's own demos disagree), SPI at 30 MHz (one project saw stripes at
   40 on this shared bus). The console listens on both USB ports.
+- First run on a real board, 0.6 from the site: the screen stopped with "not enough memory for the
+  screen", about 35 KB of the chip's own RAM left and the 8 MB of PSRAM nearly empty. For 0.7 the map's
+  picture, TLS and the WiFi's buffers went to the PSRAM. That build has not run on one yet.
 - Not driven yet: the WS2812 LED on GPIO 27 (GRB), the AHT20 sensor on I2C 9/8, the speaker on 26.
 - The one who asked has the board and offered to test a build. To learn from it: RGB or BGR, which
   landscape is upright, whether the touch's pen interrupt is there, whether 30 MHz stays clean.
