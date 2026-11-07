@@ -733,6 +733,8 @@ static const char *board_name(void)
     return "crowadv50";
 #elif RADAR_DISPLAY == DISPLAY_JC8048W550_800x480
     return "jc8048w550";
+#elif RADAR_DISPLAY == DISPLAY_TAB5_1280x720
+    return "tab5";
 #else
     return "other";
 #endif
@@ -742,7 +744,11 @@ static const char *board_name(void)
 static void say_ready(void)
 {
     uint8_t m[6] = { 0 };
+#if CONFIG_IDF_TARGET_ESP32P4
+    esp_read_mac(m, ESP_MAC_BASE);                      // the WiFi's MAC is the C6's: the P4's own base one, as fixed to this board
+#else
     esp_read_mac(m, ESP_MAC_WIFI_STA);
+#endif
     printf("OWLOS READY flight-radar %s %s %02x%02x%02x%02x%02x%02x\n", FLIGHT_VERSION, board_name(), m[0], m[1], m[2], m[3], m[4], m[5]);
 }
 
