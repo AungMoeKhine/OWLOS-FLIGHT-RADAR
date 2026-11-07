@@ -333,7 +333,7 @@ int main(int argc, char **argv)
     {
         // SET UP WIFI: the networks it hears, then a password typed on the keyboard
         static const ap_t APS[] = {
-            { "Kirin82", -48, 0 }, { "OWL-GUEST", -61, 1 }, { "Office-5G", -70, 0 }, { "Cafe Corner", -77, 0 },
+            { "Kirin82", -48, 0 }, { "OWL-GUEST", -61, 1 }, { "Office-5G", -70, 0 }, { "Cafe Corner", -77, 0, 1 },
             { "DIRECT-7B-Printer", -83, 0 }, { "FreeWiFi Station", -88, 1 },
         };
         const demo_box_t d = demo_box(&ui);
@@ -358,6 +358,9 @@ int main(int argc, char **argv)
         shot("35-wifi-shown");
         press_bar(1, 3);                             // CANCEL: the password goes
         printf("after cancel: %s, %d letters kept\n", ui.view == VIEW_WIFI ? "the networks" : "?", (int)strlen(ui.wifi_pass));
+        tap(GFX_W / 2, LIST_Y0 + 3 * NET_H + NET_H / 2);  // Cafe Corner, one the board remembers
+        printf("picked %s, saved: %s\n", ui.wifi_ssid, ui.view == VIEW_MAIN ? "joins, no keyboard" : "the keyboard");
+        ui.view = VIEW_WIFI;
         press_bar(1, 2);                             // BACK
         ui.net.n_aps = 0;
         ui.net.scan = SCAN_NONE;

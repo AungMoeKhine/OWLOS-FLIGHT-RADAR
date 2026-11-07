@@ -1,14 +1,12 @@
 # OWLOS Flight Radar
 
-![The 3.5 inch board: the planes around home, a tap on one, the map turned and zoomed, the three looks](shots/st7796/tour.gif)
+[![What it does: the planes round your home, the radar turned and zoomed, the looks, an emergency on the RGB LED](shots/promo.gif)](https://kirindenis.github.io/OWLOS-FLIGHT-RADAR/shots/promo.mp4)
 
 **Flash it from the browser: [kirindenis.github.io/OWLOS-FLIGHT-RADAR](https://kirindenis.github.io/OWLOS-FLIGHT-RADAR/)**
 
+**Try it in your browser: [the radar in a page](https://kirindenis.github.io/OWLOS-FLIGHT-RADAR/radar/)**, a demo sky, or your own board's planes over the USB cable.
+
 Questions, ideas, a photo of your board: [our group on Facebook](https://www.facebook.com/groups/OWLOS).
-
-[![What it does and what 0.6 added: on this frame an emergency round home blinks the RGB LED red](shots/promo.png)](https://kirindenis.github.io/OWLOS-FLIGHT-RADAR/shots/promo.mp4)
-
-**[Watch what it does and what 0.6 added](https://kirindenis.github.io/OWLOS-FLIGHT-RADAR/shots/promo.mp4)**, about a minute. The planes are a demo sky on the PC simulator.
 
 The planes around your home on a small ESP32 board with a screen. Each plane is a silhouette turned the
 way it flies, coloured by its height, with a trail behind it. Tap one for its callsign, type, height and
@@ -81,6 +79,9 @@ The map under them comes from OpenStreetMap.
   network, type its password, JOIN. The home is typed there too: SET, the HOME row.
 - From the site, step 2: the WiFi, your home point, where the planes come from and how the screen shows,
   sent over the same USB cable. The round board and the RPi LCD take their WiFi this way.
+- The board remembers five networks, the last one set first, and joins whichever it finds: at home, at a
+  second home, on a phone's hotspot. A sixth takes the oldest one's place. The site shows them, each with
+  **FORGET**.
 - Till it gets a home the board sits in Trenčín, Slovakia. The plane network only hears the home rounded
   to about a kilometre: enough to say where to look, not where you live. A town or a postcode typed on
   the board goes to OpenStreetMap's Nominatim to be found.
@@ -168,7 +169,7 @@ The pictures are the 3.5" board, the 2.8" one has the same screens a little smal
 ![The WiFi networks the board hears, with arrows](shots/guide/wifi.png)
 
 - The networks the board hears, the strongest first. A lock asks for a password, OPEN does not, SET is
-  the one in use.
+  the one in use, SAVED one it remembers: a tap joins it with no typing.
 - **Tap your network**. **LOOK AGAIN** looks round once more. The ESP32 hears 2.4 GHz networks only.
 
 ### The password
@@ -289,6 +290,9 @@ and a PC preview.
   as its `site-fw` artifact for 90 days. 0.2 and 0.3 came before the site kept versions: they come
   once from the runs that built them, `.github/archive-seed.txt`.
 - `tools/QrBake` (.NET 8) writes the site's address and its QR code into `core/qr_site.h` and `.c`.
+- `web/BUILD.BAT` (Emscripten in `C:\emsdk`) builds `core/` for WebAssembly: `web/index.html` is the radar
+  in a web page, the 5" layout. A demo sky till a board is connected over Web Serial, then the board's
+  planes, and what a finger does on either side goes to the other. Serve that folder with any web server.
 - `tools/preview/BUILD.BAT <screen>` (Visual Studio 2022) draws every page on the PC into `shots/`.
   `TOUR.BAT` films the how-to tour, `GIF.BAT` makes the GIF above from it (both with ffmpeg).
 - `tools/Guide/GUIDE.BAT` (.NET 8) puts the arrows on the shots: `shots/guide/`, from `notes.txt`.
@@ -307,7 +311,8 @@ What is where:
 The site talks to the board over the USB cable at 115200 baud, a line each way. Scripts can do the same.
 
 - `OWLOS HELLO` is answered with `OWLOS READY flight-radar <version>`.
-- `OWLOS GET` is answered with `OWLOS CFG {...}`: the network's name, home (`lat`, `lon`, `place`,
+- `OWLOS GET` is answered with `OWLOS CFG {...}`: the network's name, `nets` (all it remembers, names
+  only; `OWLOS SET {"forget":"name"}` takes one out), home (`lat`, `lon`, `place`,
   `country`), `src`, whether a `key` is stored, `up`, `flip`, `theme`, `look`, `map`, `ground`, `watch`,
   `vectors`, `beam_step`, `clock`, `block`, `autopilot`, `lost`, `conflict`, `fl_lo`, `fl_hi`, `utc` (seconds
   since 1970, 0 not known), `led`, `led_level`, `led_hold`, `led_near`, `led_red`, `version`, `newest` (the site's, `""` not heard

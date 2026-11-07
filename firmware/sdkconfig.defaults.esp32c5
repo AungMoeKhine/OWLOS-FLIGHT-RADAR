@@ -3,10 +3,17 @@
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
 CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
-# PSRAM when it is there, asked for by name only (heap_caps_malloc with MALLOC_CAP_SPIRAM): plain
-# malloc stays in the chip's own RAM, as on the boards without it
+# the PSRAM, asked for by name (heap_caps_malloc with MALLOC_CAP_SPIRAM): plain malloc stays in the
+# chip's own RAM. the first board that ran this had about 35 KB of that left for the strips and
+# stopped, so TLS and the WiFi's buffers go out, and the map's picture (iram_first in main.c). the
+# WiFi asks for PSRAM only when PSRAM is not optional: a C5 without it does not start on this build
 CONFIG_SPIRAM=y
-CONFIG_SPIRAM_IGNORE_NOTFOUND=y
 CONFIG_SPIRAM_USE_CAPS_ALLOC=y
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+# CONFIG_SPIRAM_IGNORE_NOTFOUND is not set
+# that way the WiFi keeps its send buffers for good, 1.6 KB each and 16 unless told. the radar sends
+# short questions, what does not fit waits in the PSRAM
+CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=6
 # the log goes to two ports here too, see sdkconfig.defaults.s3lcd
 CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096

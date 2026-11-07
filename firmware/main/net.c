@@ -10,12 +10,20 @@
 #include "esp_netif_sntp.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 
 static const char *TAG = "net";
 static volatile int s_up, s_why;
 static char s_ip[16];
 static int s_started, s_have_ssid;
+
+/* the networks it remembers and the one it tries now. the event task goes round them, the site
+ * and the screen change them: both hold the lock, for the list and for the driver's settings */
+static SemaphoreHandle_t s_lock;
+static nets_t s_nets;
+static int    s_at;
+static char   s_name[33];
 
 /* looking round for networks, for the screen's WiFi page. the driver will not look while it is
  * joining, and with a network set that is not there it joins every two seconds: the joining
@@ -68,6 +76,33 @@ static void scan_collect(int ok)
     ESP_LOGI(TAG, "looked round: %d networks%s", ng, ok ? "" : ", the scan failed");
 }
 
+// the driver joins this one from now on. false: it is in the middle of something, nothing changed
+static int apply(int at)
+{
+    static wifi_config_t wc;                          // off the stack: the event task comes here too, see scan_collect
+    const net_kept_t *n = &s_nets.n[at];
+    memset(&wc, 0, sizeof wc);
+    // the driver's fields need no ending zero when full: a 32 letter name fills all 32
+    memcpy(wc.sta.ssid, n->ssid, strnlen(n->ssid, sizeof wc.sta.ssid));
+    memcpy(wc.sta.password, n->pass, strnlen(n->pass, sizeof wc.sta.password));
+    wc.sta.threshold.authmode = n->pass[0] ? WIFI_AUTH_WEP : WIFI_AUTH_OPEN;
+    s_have_ssid = n->ssid[0] != 0;
+    if (esp_wifi_set_config(WIFI_IF_STA, &wc) != ESP_OK) return 0;
+    s_why = WHY_NONE;                                 // a new network: nothing known about it yet
+    s_at = at;
+    memcpy(s_name, n->ssid, sizeof s_name);
+    return 1;
+}
+
+/* this one did not answer: on to the next, round and round, and the one in reach comes up. with
+ * one network nothing changes */
+static void next_network(void)
+{
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    if (s_nets.count > 1 && apply((s_at + 1) % s_nets.count)) ESP_LOGI(TAG, "on to network \"%s\"", s_name);
+    xSemaphoreGive(s_lock);
+}
+
 static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     (void)arg;
@@ -83,7 +118,10 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
                 reason == WIFI_REASON_HANDSHAKE_TIMEOUT ? WHY_PASSWORD : WHY_NOT_FOUND;
         ESP_LOGW(TAG, "WiFi lost (reason %d), trying again", reason);
         vTaskDelay(pdMS_TO_TICKS(2000));              // the event task waits, the router gets a breath
-        if (s_have_ssid && s_scan != SCAN_RUNNING) esp_wifi_connect();
+        if (s_have_ssid && s_scan != SCAN_RUNNING) {
+            if (reason != WIFI_REASON_ASSOC_LEAVE) next_network();   // that one is the board's own doing
+            esp_wifi_connect();
+        }
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_SCAN_DONE) {
         const wifi_event_sta_scan_done_t *e = data;
         scan_collect(e && e->status == 0);
@@ -93,7 +131,7 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         snprintf(s_ip, sizeof s_ip, IPSTR, IP2STR(&e->ip_info.ip));
         s_up = 1;
         s_why = WHY_NONE;
-        ESP_LOGI(TAG, "WiFi up, %s", s_ip);
+        ESP_LOGI(TAG, "WiFi up, %s, network \"%s\"", s_ip, s_name);
     }
 }
 
@@ -143,22 +181,12 @@ int net_scan_get(ap_t *out, int *n)
 
 int net_why(void) { return s_have_ssid && !s_up ? s_why : WHY_NONE; }
 
-static void apply(const secrets_t *s)
-{
-    s_why = WHY_NONE;                                 // a new network: nothing known about it yet
-    wifi_config_t wc = { 0 };
-    // the driver's fields need no ending zero when full: a 32 letter name fills all 32
-    memcpy(wc.sta.ssid, s->ssid, strnlen(s->ssid, sizeof wc.sta.ssid));
-    memcpy(wc.sta.password, s->pass, strnlen(s->pass, sizeof wc.sta.password));
-    wc.sta.threshold.authmode = s->pass[0] ? WIFI_AUTH_WEP : WIFI_AUTH_OPEN;
-    s_have_ssid = s->ssid[0] != 0;
-    esp_wifi_set_config(WIFI_IF_STA, &wc);
-}
-
-void net_start(const secrets_t *s)
+void net_start(const nets_t *l)
 {
     if (s_started) return;
     s_started = 1;
+    s_lock = xSemaphoreCreateMutex();
+    s_nets = *l;
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();
@@ -168,21 +196,26 @@ void net_start(const secrets_t *s)
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_event, NULL));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));    // our NVS keeps the settings, not the driver's
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    apply(s);
+    apply(0);
     ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_LOGI(TAG, "WiFi started, network \"%s\"", s->ssid);
+    ESP_LOGI(TAG, "WiFi started, network \"%s\", %d kept", s_name, s_nets.count);
 }
 
-void net_reconnect(const secrets_t *s)
+void net_reconnect(const nets_t *l)
 {
-    if (!s_started) { net_start(s); return; }
+    if (!s_started) { net_start(l); return; }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
     esp_wifi_disconnect();
-    apply(s);
+    s_nets = *l;
+    apply(0);
+    xSemaphoreGive(s_lock);
     if (s_have_ssid) esp_wifi_connect();
-    ESP_LOGI(TAG, "WiFi settings changed, network \"%s\"", s->ssid);
+    ESP_LOGI(TAG, "WiFi settings changed, network \"%s\", %d kept", s_name, s_nets.count);
 }
 
 int net_up(void) { return s_up; }
+
+void net_ssid(char *buf, int cap) { snprintf(buf, (size_t)cap, "%s", s_name); }
 
 void net_ip(char *buf, int cap) { snprintf(buf, (size_t)cap, "%s", s_ip); }
 
