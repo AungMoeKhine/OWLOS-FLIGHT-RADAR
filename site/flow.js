@@ -19,15 +19,15 @@ const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const fmt = (n) => n.toLocaleString('en-US');
 
 const BOARDS = {
-  ili9341: { name: '2.8" CYD', spec: 'ESP32, 320x240, resistive touch', chip: 'esp32', w: 320, h: 240, inch: 2.8, touch: 'resistive', twin: 'Twin1', shot: '02-live.png', yellow: true },
+  ili9341: { name: '2.8" CYD', spec: 'ESP32, 320x240, resistive touch', chip: 'esp32', w: 320, h: 240, inch: 2.8, touch: 'resistive', twin: 'Twin1', shot: '02-live.png', yellow: true, screens: 'three' },
   st7796: { name: '3.5" CYD', spec: 'ESP32, 480x320, touch', chip: 'esp32', w: 480, h: 320, inch: 3.5, touch: 'resistive or capacitive', twin: 'Twin2', shot: 'st7796/02-live.png', yellow: true },
   ili9486: { name: '3.5" RPi LCD', spec: 'on OWLOSAirQuality, no touch', chip: 'esp32', w: 480, h: 320, inch: 3.5, touch: 'none', twin: 'Twin2', shot: 'ili9486/03-picked-heavy.png' },
   gc9a01: { name: '1.28" round', spec: 'Elecrow CrowPanel, ESP32-C3', chip: 'c3', w: 240, h: 240, inch: 1.28, touch: 'capacitive', round: true, twin: 'Twin4', shot: 'gc9a01/03-picked-heavy.png' },
-  nmcydc5: { name: '2.8" NM-CYD-C5', spec: 'ESP32-C5, 320x240, resistive touch', chip: 'c5', w: 320, h: 240, inch: 2.8, touch: 'resistive', twin: 'Twin1', shot: '02-live.png' },
-  es3c28p: { name: '2.8" LCDWIKI ES3C28P', spec: 'ESP32-S3, 320x240, capacitive touch', chip: 's3', w: 320, h: 240, inch: 2.8, touch: 'capacitive', twin: 'Twin1', shot: '02-live.png' },
-  crowadv28: { name: '2.8" CrowPanel Advance', spec: 'ESP32-S3, 320x240 IPS, capacitive touch', chip: 's3', w: 320, h: 240, inch: 2.8, touch: 'capacitive', twin: 'Twin1', shot: '02-live.png' },
-  crowadv50: { name: '5" CrowPanel Advance', spec: 'ESP32-S3, 800x480 IPS, capacitive touch', chip: 's3', w: 800, h: 480, inch: 5, touch: 'capacitive', twin: 'Twin', shot: 'crowadv50/02-live.png' },
-  jc8048w550: { name: '5" Guition JC8048W550', spec: 'ESP32-S3, 800x480, capacitive touch', chip: 's3', w: 800, h: 480, inch: 5, touch: 'capacitive', twin: 'Twin', shot: 'crowadv50/02-live.png' },
+  nmcydc5: { name: '2.8" NM-CYD-C5', spec: 'ESP32-C5, 320x240, resistive touch', chip: 'c5', w: 320, h: 240, inch: 2.8, touch: 'resistive', twin: 'Twin1', shot: '02-live.png', screens: 'two' },
+  es3c28p: { name: '2.8" LCDWIKI ES3C28P', spec: 'ESP32-S3, 320x240, capacitive touch', chip: 's3', w: 320, h: 240, inch: 2.8, touch: 'capacitive', twin: 'Twin1', shot: '02-live.png', screens: 'three' },
+  crowadv28: { name: '2.8" CrowPanel Advance', spec: 'ESP32-S3, 320x240 IPS, capacitive touch', chip: 's3', w: 320, h: 240, inch: 2.8, touch: 'capacitive', twin: 'Twin1', shot: '02-live.png', screens: 'two' },
+  crowadv50: { name: '5" CrowPanel Advance', spec: 'ESP32-S3, 800x480 IPS, capacitive touch', chip: 's3', w: 800, h: 480, inch: 5, touch: 'capacitive', twin: 'Twin', shot: 'crowadv50/02-live.png', screens: 'two' },
+  jc8048w550: { name: '5" Guition JC8048W550', spec: 'ESP32-S3, 800x480, capacitive touch', chip: 's3', w: 800, h: 480, inch: 5, touch: 'capacitive', twin: 'Twin', shot: 'crowadv50/02-live.png', screens: 'two' },
 };
 const CHIP_NAME = { esp32: 'ESP32', s3: 'ESP32-S3', c3: 'ESP32-C3', c5: 'ESP32-C5' };
 const THEMES = ['arctic', 'phosphor', 'amber', 'crimson', 'synth'];
@@ -455,6 +455,13 @@ function say(text, kind = '') {
 /* a setting on one board: the screen here, and the board itself */
 function setOne(u, name, value) {
   const s = u ? u.screen : hero;
+  if (name === 'flip') {                               // the board's own screen: this page shows it upright anyway
+    if (!u?.link || !['on', 'off'].includes(value)) {
+      return false;
+    }
+    u.link.send(`OWLOS SET ${JSON.stringify({ flip: value === 'on' ? 1 : 0 })}`).then(() => u.link.send('OWLOS GET')).catch((e) => console.warn(e));
+    return true;
+  }
   if (!s.m || !s.set(name, value)) {
     return false;
   }
@@ -469,7 +476,7 @@ const FILES = {
   info: (u) => unitFacts(u).map(([k, v]) => `${k}: ${v}`),
   config: (u) => {
     const c = u.screen.cfg();
-    return [`theme=${THEMES[c.theme]}`, `look=${LOOKS[c.look]}`, `range=${Math.round(c.range)}`,
+    return [`theme=${THEMES[c.theme]}`, `look=${LOOKS[c.look]}`, `range=${Math.round(c.range)}`, `flip=${u.cfg?.flip ? 'on' : 'off'}`,
       ...Object.keys(SWITCHES).map((k) => `${k}=${u.screen.opts[k] ? 'on' : 'off'}`)];
   },
   wifi: (u) => (u.nets?.length ? [...u.nets, '(passwords go in, never out)'] : ['no network set']),
@@ -485,7 +492,7 @@ const boardApi = {
   showAll: () => showAll(),
   showLive: (u) => showLive(u),
   files: FILES,
-  settings: [...THEMES.map((v) => `theme=${v}`), ...LOOKS.map((v) => `look=${v}`), ...RANGES.map((v) => `range=${v}`), ...Object.keys(SWITCHES).flatMap((k) => [`${k}=on`, `${k}=off`])],
+  settings: [...THEMES.map((v) => `theme=${v}`), ...LOOKS.map((v) => `look=${v}`), ...RANGES.map((v) => `range=${v}`), ...Object.keys(SWITCHES).flatMap((k) => [`${k}=on`, `${k}=off`]), 'flip=on', 'flip=off'],
   set: setOne,
   async send(u, line) {
     if (!u.link) {
@@ -494,6 +501,7 @@ const boardApi = {
     await u.link.send(line);
   },
   findHome: (text) => findHome(text),
+  screens: (u) => SCREENS[BOARDS[u.build].screens]?.names ?? [],
   flash: (u) => updateThen(u),
   follow(on) {
     following = on;
@@ -606,6 +614,10 @@ async function attach(link, port, who) {
         skyUnit = null;                                // a new home: the ground under it again
         pickSky();
       }
+      const names = SCREENS[BOARDS[u.build].screens]?.names ?? [];
+      desk.get(u.mac)?.body.querySelectorAll('[data-screen]').forEach((el) => {
+        el.setAttribute('aria-pressed', String(names[now.screen] === el.dataset.screen));
+      });
       drawPane(u);
     } else if (line.startsWith('OWLOS ALIGN ')) {
       u.aligning = line.endsWith('1');
@@ -788,7 +800,7 @@ async function flashNew() {
   }
   const u = await afterFlash(port);
   if (u) {
-    showLive(u, true);
+    showLive(u);
   } else {
     stage('<h2>Flashed</h2><p>The board restarted and came back on another port, as a board with its own USB does. Connect it once more.</p><div class="row"><button class="btn" id="again">CONNECT</button></div>');
     $('again').addEventListener('click', addBoard);
@@ -868,11 +880,21 @@ function unitFacts(u) {
   return [['Board', b.name], ['Chip', CHIP_NAME[b.chip]], ['Screen', `${b.w} x ${b.h}, ${b.inch}"`], ['Touch', b.touch], ['Firmware', u.version || 'not known yet'], ['Cable', u.online ? usbName(u.port) : 'not connected']];
 }
 
-/* what a board just flashed may ask of you, on its own screen */
-function firstWords(u) {
-  return u.build === 'ili9341'
-    ? '<p class="note wait">Colours wrong, or the picture upside down or mirrored? This board is sold with three screens: press BOOT right after a restart, each press tries the next one.</p>'
-    : '';
+/* the boards sold with more than one screen: the board can't tell which it has. the page switches it
+ * at once, BOOT in the first 8 seconds does the same on the board itself. the order is board.h's */
+const SCREENS = {
+  three: { names: ['V1', 'V2', 'V3'], words: 'Picture mirrored, upside down, like a negative or in wrong colours? This board is sold with three screens, try the others:' },
+  two: { names: ['RGB', 'BGR'], words: 'Red and blue swapped? Try the other colour order:' },
+};
+
+function screenWords(u) {
+  const s = SCREENS[BOARDS[u.build].screens];
+  if (!s) {
+    return '';
+  }
+  const chips = s.names.map((n, i) => `<button class="chip" data-screen="${n}" aria-pressed="${u.cfg?.screen === i}">${n}</button>`).join('');
+  return `<div class="note wait boothint"><p>${s.words}</p><div class="chips">${chips}</div>
+    <p>The board keeps the one you stop on. Or press BOOT within 8 seconds after a restart. <a href="previous/#boot" target="_blank">More</a></p></div>`;
 }
 
 function liveNote(u) {
@@ -979,7 +1001,8 @@ function panePart(u, tab) {
     pane.innerHTML = `${round ? '' : `<div class="field"><span>Look</span><div class="chips">${LOOKS.map((l, i) => `<button class="chip" data-set="look=${l}" aria-pressed="${c.look === i}">${l.toUpperCase()}</button>`).join('')}</div></div>`}
       <div class="field"><span>Colours</span><div class="chips">${THEMES.map((t, i) => `<button class="chip" data-set="theme=${t}" aria-pressed="${c.theme === i}">${t.toUpperCase()}</button>`).join('')}</div></div>
       <label>Range: <b class="rangeword">${Math.round(c.range)}</b> km<input type="range" class="range" min="0" max="${RANGES.length - 1}" value="${range}"></label>
-      <div class="field"><span>On the radar</span><div class="chips">${Object.entries(SWITCHES).map(([k, v]) => `<button class="chip" data-set="${k}=${s.opts[k] ? 'off' : 'on'}" aria-pressed="${!!s.opts[k]}">${v.toUpperCase()}</button>`).join('')}</div></div>`;
+      <div class="field"><span>On the radar</span><div class="chips">${Object.entries(SWITCHES).map(([k, v]) => `<button class="chip" data-set="${k}=${s.opts[k] ? 'off' : 'on'}" aria-pressed="${!!s.opts[k]}">${v.toUpperCase()}</button>`).join('')}</div></div>
+      ${u ? `<div class="field"><span>The board's screen</span><div class="chips"><button class="chip" data-set="flip=${u.cfg?.flip ? 'off' : 'on'}" aria-pressed="${!!u.cfg?.flip}">UPSIDE DOWN</button></div></div>` : ''}`;
     const apply = (name, value) => {
       if (u) {
         term.run(`set ${name}=${value} --board ${short(u)}`);
@@ -1047,12 +1070,15 @@ function fillBoard(u) {
   w.body.innerHTML = `<div class="bw"><div class="main"><div class="gl glass"></div>
     <div class="zoom"><button class="zo" aria-label="smaller">-</button><span class="zw"></span><button class="zi" aria-label="bigger">+</button>
     <button class="again settings">SETTINGS</button>${u ? '<button class="again flash">FLASH AGAIN</button>' : ''}</div>
-    <div class="livenote">${liveNote(u)}</div><div class="first"></div></div>
+    <div class="livenote">${liveNote(u)}</div>${u ? screenWords(u) : ''}</div>
     <div class="side" hidden><div class="tabs" role="tablist"><button role="tab" data-tab="setup">SETUP</button><button role="tab" data-tab="view">VIEW</button><button role="tab" data-tab="board">BOARD</button></div><div class="pane"></div></div></div>`;
   const gl = w.q('.gl');
   gl.classList.toggle('round', !!round);
   gl.classList.toggle('yellow', !!(u && BOARDS[u.build].yellow));
   gl.append((u ? u.screen : hero).canvas);
+  w.body.querySelectorAll('[data-screen]').forEach((el) => {
+    el.addEventListener('click', () => term.run(`screen ${el.dataset.screen} --board ${short(u)}`));
+  });
   w.q('.zo').addEventListener('click', () => zoomBy(u, -1));
   w.q('.zi').addEventListener('click', () => zoomBy(u, 1));
   /* flashing is not a click to make by accident: the first one only asks */
@@ -1100,7 +1126,7 @@ function boardWin(u) {
   });
 }
 
-async function showLive(u, justFlashed = false) {
+async function showLive(u) {
   if (u) {
     await u.ready;
   }
@@ -1110,9 +1136,6 @@ async function showLive(u, justFlashed = false) {
   const w = boardWin(u);
   w.show();
   fillBoard(u);
-  if (justFlashed && u?.online) {
-    w.q('.first').innerHTML = firstWords(u);
-  }
   w.front();
   renderBar();
   desk.layout();

@@ -136,7 +136,7 @@ export function boardCommands(api) {
       },
     },
     {
-      name: 'set', group: 'boards', summary: 'a setting: theme, look, range, vectors, clock, block, conflict', usage: 'set NAME=VALUE [--all] [--board NAME]', where: 'here',
+      name: 'set', group: 'boards', summary: 'a setting: theme, look, range, vectors, clock, block, conflict, flip', usage: 'set NAME=VALUE [--all] [--board NAME]', where: 'here',
       options: on, valued: ['board'], effect: 'writes', data: '{ name, value, boards }',
       complete: (word) => api.settings.filter((s) => s.startsWith(word)),
       run(ctx) {
@@ -190,6 +190,27 @@ export function boardCommands(api) {
         await api.send(u, `OWLOS SET ${JSON.stringify(found)}`);
         await api.send(u, 'OWLOS GET');
         ctx.data(found);
+        return 0;
+      },
+    },
+    {
+      name: 'screen', group: 'boards', summary: 'which of the screens a board is sold with: V1, V2, V3, or RGB, BGR', usage: 'screen NAME [--board NAME]', where: 'here',
+      options: { board: on.board }, valued: ['board'], effect: 'writes', data: 'none',
+      complete: (word) => ['V1', 'V2', 'V3', 'RGB', 'BGR'].filter((n) => n.startsWith(word)),
+      async run(ctx) {
+        const [u] = chosen(ctx);
+        const names = api.screens(u);
+        const at = names.indexOf((ctx.args[0] ?? '').toUpperCase());
+        if (!names.length) {
+          ctx.err(`${api.short(u)} has only one screen`);
+          return 1;
+        }
+        if (at < 0) {
+          ctx.err(`screen takes ${names.join(', ')}`);
+          return 1;
+        }
+        await api.send(u, `OWLOS SET ${JSON.stringify({ screen: at })}`);
+        await api.send(u, 'OWLOS GET');
         return 0;
       },
     },

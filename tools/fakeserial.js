@@ -51,7 +51,7 @@
         } else if (l === 'OWLOS GET') {
           this.line(`OWLOS CFG ${JSON.stringify({
             ssid: 'test-net', nets: ['test-net'], lat: 50.9, lon: 4.48, place: 'Testville Sčín', country: 'XX', up: 0, theme: this.b.theme, look: 0, map: 1, ground: 1, range: 50, dist_unit: 0,
-            alt_unit: 0, labels: 1, vectors: 0, beam_step: 0, clock: 0, block: 0, autopilot: 0, lost: 0, conflict: 0, fl_lo: 0, fl_hi: 0, version: '0.8',
+            alt_unit: 0, labels: 1, vectors: 0, beam_step: 0, clock: 0, block: 0, autopilot: 0, lost: 0, conflict: 0, fl_lo: 0, fl_hi: 0, version: '0.8', screen: this.b.screen ?? 1, flip: this.b.flip ?? 0,
           })}`);
         } else if (l === 'OWLOS SKIP') {
           this.line('OWLOS ALIGN 0');
@@ -68,6 +68,13 @@
           answer();
           this.sky = setInterval(answer, 15000);
         } else if (l.startsWith('OWLOS SET ')) {
+          const set = JSON.parse(l.slice(10));
+          if (set.screen !== undefined) {
+            this.b.screen = set.screen;
+          }
+          if (set.flip !== undefined) {
+            this.b.flip = set.flip;
+          }
           this.line('OWLOS OK');
         }
       }

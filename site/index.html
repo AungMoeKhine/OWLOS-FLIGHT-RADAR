@@ -138,6 +138,10 @@
   .note { margin: 8px 2px 0; color: var(--dim); font-size: 14px; }
   .note b { color: var(--good); font-weight: 600; }
   .note.wait b { color: var(--warn); }
+  .note.boothint { max-width: 460px; margin: 8px auto 0; color: var(--warn); font-size: 13px; text-align: center; }
+  .boothint p { margin: 0; }
+  .boothint .chips { justify-content: center; margin: 6px 0; }
+  .boothint .chip[aria-pressed="true"] { color: #03081a; background: var(--warn); border-color: var(--warn); }
 
   .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); }
   .tabs button {
