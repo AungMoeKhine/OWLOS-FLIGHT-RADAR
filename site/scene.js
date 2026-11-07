@@ -717,7 +717,8 @@ export function startScene(canvas, getRadar, onPick) {
   }
 
   function boardCorners(b) {
-    const h = b.L * 0.6;
+    const radar = getRadar();
+    const h = b.L * (radar ? radar.height / radar.width : 0.6);   // the shape of the screen it shows
     return { x: b.x, y: b.y, z: b.z + 34, L: b.L, h };
   }
 

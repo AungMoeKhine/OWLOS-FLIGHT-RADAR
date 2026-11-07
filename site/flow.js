@@ -4,6 +4,7 @@
 
 import { startScene } from './scene.js';
 import { loadRelief } from './relief.js';
+import { reliefAround } from './relief-live.js';
 import { Link } from './link.js';
 import { detect, flash as writeFirmware } from './flasher.js';
 import { Shell } from './console/shell.js';
@@ -291,7 +292,7 @@ function remember() {
 function addUnit({ mac, name, build, online = false, zoom = 1 }) {
   const screen = new Screen(BOARDS[build].twin);
   screen.zoom = zoom;
-  const u = { mac, name, build, online, version: '', wifi: null, nets: [], port: null, link: null, planes: 0, screen, ready: screen.start() };
+  const u = { mac, name, build, online, version: '', wifi: null, nets: [], port: null, link: null, planes: 0, sky: [], screen, ready: screen.start() };
   app.units.push(u);
   return u;
 }
@@ -331,7 +332,58 @@ function barState() {
   return text;
 }
 
+/* --- the picture on top: with a board on a cable its planes fly over its own ground --- */
+
+const KM_PER_UNIT = 0.12;
+const UNITS_PER_METRE = 0.12;
+let skyUnit = null;                                    // the board the picture shows
+let demoGround = null;                                 // the ground of the demo sky
+
+function toScene(a, home) {
+  const east = 111.32 * Math.cos(home.lat * Math.PI / 180);
+  const way = (a.track ?? 0) * Math.PI / 180;
+  const speed = (a.gs ?? 0) * 1.852 / 3600 / KM_PER_UNIT;
+  const feet = a.alt_baro;
+  const late = a.seen_pos ?? 0;                        // seconds since this position was heard
+  return {
+    id: a.hex, name: (a.flight ?? '').trim() || a.r || a.hex, type: a.t || 'Unknown type', level: feet >= 6000 ? `FL${Math.round(feet / 100)}` : `${fmt(feet)} ft`,
+    knots: Math.round(a.gs ?? 0), feet: `${fmt(feet)} ft`, course: String(Math.round(a.track ?? 0)).padStart(3, '0'), squawk: a.squawk ?? 'none',
+    x: (a.lon - home.lon) * east / KM_PER_UNIT + Math.sin(way) * speed * late, y: -(a.lat - home.lat) * 111.32 / KM_PER_UNIT - Math.cos(way) * speed * late,
+    z: 30 + Math.min(feet, 45000) / 45000 * 150,
+    vx: Math.sin(way) * speed, vy: -Math.cos(way) * speed, heading: Math.atan2(-Math.cos(way), Math.sin(way)), rotor: a.category === 'A7',
+  };
+}
+
+/* which board: the one on show, or the first on a cable. none: the demo again */
+function pickSky() {
+  const u = (app.cur?.online ? app.cur : here()[0]) ?? null;
+  if (u === skyUnit) {
+    return;
+  }
+  skyUnit = u;
+  if (u) {
+    const { lat, lon } = u.cfg;
+    reliefAround(lat, lon, KM_PER_UNIT, UNITS_PER_METRE).then((fn) => {
+      if (skyUnit === u) {
+        scene.setRelief(fn);
+      }
+    }).catch((e) => console.warn(e));
+  } else {
+    scene.setSky(null);
+    scene.setRelief(demoGround);
+  }
+}
+
+/* a whole answer of a board's planes */
+function planesFrom(u) {
+  if (u === skyUnit) {
+    const home = { lat: u.cfg.lat, lon: u.cfg.lon };
+    scene.setSky(u.sky.filter((p) => typeof p.lat === 'number' && typeof p.alt_baro === 'number').map((p) => toScene(p, home)));
+  }
+}
+
 function renderBar() {
+  pickSky();
   const chips = [];
   if (app.units.length > 1) {
     chips.push(`<button class="uchip" data-all aria-pressed="${app.view === 'all'}">ALL</button>`);
@@ -511,15 +563,32 @@ async function attach(link, port, who) {
   link.onLine = (line) => {
     if (line.startsWith('OWLOS CFG ')) {
       const now = JSON.parse(line.slice(10));
+      const moved = now.lat !== u.cfg?.lat || now.lon !== u.cfg?.lon;
       u.wifi = now.ssid || null;
       u.nets = now.nets ?? [];
+      u.cfg = now;
       u.screen.fromBoard(now);
+      if (moved && u === skyUnit) {
+        skyUnit = null;                                // a new home: the ground under it again
+        pickSky();
+      }
       drawPane();
     } else if (line.startsWith('OWLOS ALIGN ')) {
       u.aligning = line.endsWith('1');
       renderBar();
+    } else if (line.startsWith('OWLOS PLANE ')) {
+      u.screen.take(line);
+      try {
+        u.sky.push(JSON.parse(line.slice(12)));
+      } catch (e) {
+        console.warn(e);
+      }
+    } else if (line.startsWith('OWLOS SKY BEGIN ')) {
+      u.screen.take(line);
+      u.sky = [];
     } else if (u.screen.take(line)) {
       u.planes = parseInt(line.slice(14), 10) || 0;
+      planesFrom(u);
       renderBar();
     }
     if (!line.startsWith('OWLOS PLANE') && !line.startsWith('OWLOS SKY')) {
@@ -1043,7 +1112,7 @@ function describe(id) {
   }
   if (kind === 'plane' || kind === 'heli') {
     return {
-      title: thing.name, what: `${thing.type}, in the demo sky`,
+      title: thing.name, what: thing.live ? `${thing.type}, in the air right now` : `${thing.type}, in the demo sky`,
       facts: [['Height', thing.feet], ['Speed', `${thing.knots} kt`], ['Course', thing.course], ['Squawk', thing.squawk]],
       text: kind === 'heli'
         ? 'A helicopter with ADS-B sends the same signal as a plane.'
@@ -1150,7 +1219,7 @@ function tickAll(now) {
     hero.frame(now);
   }
   for (const u of app.units) {
-    if (u.screen.m && u.screen.canvas.isConnected) {
+    if (u.screen.m && (u.screen.canvas.isConnected || (u === skyUnit && scene.isShown()))) {
       u.screen.frame(now);
     }
   }
@@ -1216,8 +1285,13 @@ if ('serial' in navigator) {
   $('cablenote').textContent = 'Connecting a board needs Chrome or Edge on a computer. Here you can look around.';
 }
 
-scene = startScene($('scene'), () => (hero.drawn ? hero.raw : null), showInfo);
-loadRelief().then((fn) => scene.setRelief(fn)).catch((e) => console.warn(e));
+scene = startScene($('scene'), () => (skyUnit?.screen.drawn ? skyUnit.screen.raw : hero.drawn ? hero.raw : null), showInfo);
+loadRelief().then((fn) => {
+  demoGround = fn;
+  if (!skyUnit) {
+    scene.setRelief(fn);
+  }
+}).catch((e) => console.warn(e));
 fetch('version.json').then((r) => r.json()).then((v) => {
   newest = v.version;
   renderBar();
