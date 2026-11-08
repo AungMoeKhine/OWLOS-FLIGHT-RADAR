@@ -277,6 +277,8 @@ const app = {
   tab: 'view',
   port: null,            // the port of the board being connected
   chip: null,            // what its bootloader said
+  mac: null,             // and its MAC
+  troubleFor: null,      // the board the connect window's word of trouble is about
   kind: null,            // the board picked for it
   ours: false,           // it runs an older Flight Radar: its settings stay
   erase: false,          // ticked by the person, never by the page
@@ -481,7 +483,10 @@ $('bar').addEventListener('click', (e) => {
 
 /* --- the console --- */
 
-const boardLog = [];                                   // { port, text }
+/* what went along each cable: { port, text, dir }. dir: 'in' a board's line, 'page' what the page did with
+ * the port and the flasher's words, 'out' a line the page sent, 'sky' a board's planes coming. the
+ * console's log has the first two, a board's PORT window all four */
+const boardLog = [];
 let following = false;                                 // true: every board, or the one board
 let term = null;
 
@@ -491,17 +496,35 @@ const named = (l) => {
 };
 
 /* what one board said, or with no board what they all said, each line with its name */
-const logLines = (u) => boardLog.filter((l) => !u || l.port === u.port).slice(-200).map((l) => (u ? l.text : named(l)));
+const logLines = (u) => boardLog.filter((l) => (l.dir === 'in' || l.dir === 'page') && (!u || l.port === u.port)).slice(-200).map((l) => (u ? l.text : named(l)));
 
-/* what the page does, in the console: a button's command as if typed, its answer, a board's log */
+/* a line the page sends, as the PORT window shows it: a password or a key never */
+const secretless = (line) => line.replace(/"(pass|key)":"(?:[^"\\]|\\.)*(?:"|\\?$)/g, '"$1":"***"');
+
+function heard(port, text, dir) {
+  if (!port) {
+    return;
+  }
+  const l = { port, text, dir };
+  boardLog.push(l);
+  if (boardLog.length > 4000) {
+    boardLog.shift();
+  }
+  for (const u of app.units.filter((v) => v.port === port)) {
+    portRow(u, l);
+    if (u.online && (dir === 'in' || dir === 'sky')) {
+      desk.get(u.mac)?.q('.onair i')?.classList.add('beat');   // the LIVE dot beats with what the board says
+    }
+  }
+}
+
+/* what the page does, in the console: a button's command as if typed, its answer, a board's log.
+ * 'board' a line the board said, 'page' what the page did with a board's port */
 function say(text, kind = '', port = null) {
   if (kind === 'cmd') {
     term.echo(text);
-  } else if (kind === 'board') {
-    boardLog.push({ port, text });
-    if (boardLog.length > 4000) {
-      boardLog.shift();
-    }
+  } else if (kind === 'board' || kind === 'page') {
+    heard(port, text, kind === 'board' ? 'in' : 'page');
     if (following === true) {
       term.write(`\x1b[90m${named({ port, text })}\x1b[0m\r\n`);
     } else if (following && following.port === port) {
@@ -600,12 +623,87 @@ term = new Terminal({
   },
 });
 
+/* --- a board's own terminal: what went along its cable, as it went --- */
+
+const portId = (u) => `port ${u.mac}`;
+
+function rowOf(l) {
+  const row = document.createElement('div');
+  row.className = `l-${l.dir}`;
+  row.textContent = l.dir === 'out' ? `> ${l.text}` : l.text;
+  return row;
+}
+
+/* one line more in a board's PORT window, when it is open. the newest stay in sight unless scrolled back */
+function portRow(u, l) {
+  const w = desk.get(portId(u));
+  if (!w || w.root.hidden) {
+    return;
+  }
+  const log = w.q('.portlog');
+  const end = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
+  log.querySelector('.none')?.remove();
+  log.append(rowOf(l));
+  while (log.childElementCount > 500) {
+    log.firstElementChild.remove();
+  }
+  if (end) {
+    log.scrollTop = log.scrollHeight;
+  }
+}
+
+function fillPort(u) {
+  const w = desk.get(portId(u));
+  if (!w) {
+    return;
+  }
+  const log = w.q('.portlog');
+  const lines = u.port ? boardLog.filter((l) => l.port === u.port).slice(-500) : [];
+  log.replaceChildren(...lines.map(rowOf));
+  if (!lines.length) {
+    const none = rowOf({ dir: 'page', text: u.port ? 'nothing yet' : 'no cable of this board in this page yet: plug it in, or FIND ITS PORT' });
+    none.classList.add('none');
+    log.append(none);
+  }
+  log.scrollTop = log.scrollHeight;
+}
+
+/* the planes' own lines are left out: a hundred every 15 seconds */
+function portWin(u) {
+  let w = desk.get(portId(u));
+  if (!w) {
+    w = desk.make(portId(u), `${u.name}: port`, { className: 'port' });
+    w.body.innerHTML = `<div class="portlog" role="log"></div>
+      <form class="portsend"><span>&gt;</span><input aria-label="a line to the board" placeholder="a line to the board as it is, Enter sends it: OWLOS GET" autocomplete="off" spellcheck="false"></form>`;
+    w.q('.portsend').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = w.q('input');
+      const line = input.value.trim();
+      if (!line) {
+        return;
+      }
+      input.value = '';
+      if (u.link) {
+        u.link.send(line).catch((err) => heard(u.port, err.message, 'page'));
+      } else {
+        portRow(u, { dir: 'page', text: 'not connected: nothing went to the board' });
+      }
+    });
+  }
+  w.show();
+  fillPort(u);
+  w.front();
+  w.root.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  return w;
+}
+
 /* --- a board on a cable --- */
 
+/* connecting and flashing lie over the picture on top: the board they bring shows in it */
 function wizard() {
   let w = desk.get('connect');
   if (!w) {
-    w = desk.make('connect', 'Connect a device', { className: 'wide' });
+    w = desk.make('connect', 'Connect a device', { className: 'wide', dock: $('sky') });
     w.body.innerHTML = '<ol class="steps" id="steps"><li>1 CONNECT</li><li>2 YOUR BOARD</li><li>3 FLASH</li><li>4 LIVE</li></ol><div id="stage"></div>';
   }
   w.show();
@@ -629,15 +727,19 @@ function manage() {
 
 function stage(html) {
   wizard();
+  app.troubleFor = null;
   const s = $('stage');
   s.innerHTML = `<div class="stage">${html}</div>`;
   desk.layout();
   return s;
 }
 
-function trouble(title, text) {
-  stage(`<h2>${esc(title)}</h2><p>${esc(text)}</p><div class="row"><button class="btn" id="again">TRY AGAIN</button></div>`);
-  $('again').addEventListener('click', () => addBoard());
+/* unit: the board this was for, and its PORT window shows what came */
+function trouble(title, text, { again = () => addBoard(), unit = null } = {}) {
+  stage(`<h2>${esc(title)}</h2><p>${esc(text)}</p><div class="row"><button class="btn" id="again">TRY AGAIN</button>${unit ? '<button class="btn quiet" id="seeport">PORT</button>' : ''}</div>`);
+  app.troubleFor = unit;                               // that board coming back by itself closes this
+  $('again').addEventListener('click', again);
+  $('seeport')?.addEventListener('click', () => portWin(unit));
 }
 
 /* the USB chip a board's cable ends in: the browser's list can then show the ports with that chip alone */
@@ -649,7 +751,8 @@ function usbOf(port) {
   return usbProductId ? { usbVendorId, usbProductId } : { usbVendorId };
 }
 
-/* a Flight Radar answered: it is one of your boards from now on */
+/* a Flight Radar answered: it is one of your boards from now on. it goes live last of all: a try that
+ * breaks before that leaves the board as it was, never on a link that is gone */
 async function attach(link, port, who) {
   let u = byMac(who.mac);
   if (!u) {
@@ -661,11 +764,8 @@ async function attach(link, port, who) {
   if (!c) {
     throw new Error('the board did not say what it has');
   }
-  Object.assign(u, { link, port, online: true, version: who.version, wifi: c.ssid || null, nets: c.nets ?? [], cfg: c });
-  const usb = usbOf(port);
-  if (usb && JSON.stringify(usb) !== JSON.stringify(u.usb)) {
-    u.usb = usb;
-    remember();
+  if (link.ended) {
+    throw new Error('the cable went away');            // while the board was being asked
   }
   u.screen.fromBoard(c);
   u.screen.onChange = (what) => {
@@ -718,56 +818,109 @@ async function attach(link, port, who) {
       renderBar();
       planesFrom(u);
     }
-    if (!line.startsWith('OWLOS PLANE') && !line.startsWith('OWLOS SKY')) {
+    if (line.startsWith('OWLOS SKY')) {
+      heard(port, line, 'sky');                        // in its PORT window, not in the console's log
+    } else if (!line.startsWith('OWLOS PLANE')) {
       say(line, 'board', port);
     }
   };
   link.onLost = () => {
+    if (u.link !== link) {
+      return;                                          // the board is on a newer link already
+    }
     u.online = false;
     u.link = null;
     u.screen.m._twin_board(0);
     say(`${u.name} is gone from its cable`, 'dim');
+    heard(port, 'the cable went away', 'page');
     if (desk.get(u.mac)) {
       fillBoard(u);
     }
     renderBar();
   };
-  await link.send('OWLOS SKY ON');
+  Object.assign(u, { link, port, online: true, nextLook: 0, version: who.version, wifi: c.ssid || null, nets: c.nets ?? [], cfg: c });
+  fillPort(u);
+  for (const v of app.units) {
+    if (v !== u && v.port === port && !v.link) {
+      v.port = null;                                   // a port tried for another board was this one's
+      fillPort(v);
+    }
+  }
+  const usb = usbOf(port);
+  if (usb && JSON.stringify(usb) !== JSON.stringify(u.usb)) {
+    u.usb = usb;
+    remember();
+  }
+  link.attached = true;
+  link.send('OWLOS SKY ON').catch((e) => console.warn(e));   // a send that fails is tried again below
   link.keep = setInterval(() => {
     link.send('OWLOS SKY ON').catch((e) => console.warn(e));
   }, 30000);
   return u;
 }
 
-/* one port, whatever is on it. an answer of ours: attached. anything else: the caller goes on */
-async function tryPort(port) {
+/* the try running on each port. the browser's connect event, the look for returns, a click and the
+ * start can all reach one port at once: the second waits for the first, the port is opened once */
+const trying = new WeakMap();
+
+/* one port, whatever is on it. an answer of ours: attached. anything else: the caller goes on, told
+ * whether anything at all came. a port a board of ours is live on is that board, left as it is */
+function tryPort(port) {
+  const live = app.units.find((u) => u.port === port && u.link);
+  if (live) {
+    return Promise.resolve({ unit: live });
+  }
+  if (!trying.has(port)) {
+    // and never longer than this: a try that hangs would otherwise hold the port for every try after it
+    const late = wait(30000).then(() => {
+      throw new Error('the port gave no answer in 30 seconds');
+    });
+    trying.set(port, Promise.race([tryOnce(port), late]).finally(() => trying.delete(port)));
+  }
+  return trying.get(port);
+}
+
+async function tryOnce(port) {
   const link = new Link(port);
   let low = false;
   link.onLine = (line) => {                            // what a board says while it starts: `log` shows it
     low = low || line.includes('Brownout detector');
     say(line, 'board', port);
   };
-  await link.open();
+  link.onSent = (line) => heard(port, secretless(line), 'out');
+  let who;
   try {
-    const who = await link.hello();
+    await link.open();                                 // in the try: a port opened half way is closed again
+    heard(port, 'port open, 115200 baud', 'page');
+    who = await link.hello();
     if (who?.mac && BOARDS[who.build]) {
       return { unit: await attach(link, port, who) };
     }
-    await link.close();
-    if (low) {
-      throw new Error(LOW_POWER);
-    }
-    return { who };
   } catch (e) {
     await link.close();                                // a try that broke half way must not keep the port
+    heard(port, e.notOpened ? 'the port did not open' : `port closed: ${e.message}`, 'page');
     throw low ? new Error(LOW_POWER) : e;
   }
+  const silent = link.bytes === 0;
+  if (!who) {
+    say(silent ? 'no answer: not a byte came from this port' : `no answer of a Flight Radar: ${link.bytes} bytes came`, 'page', port);
+  }
+  await link.close();
+  heard(port, 'port closed', 'page');
+  if (low) {
+    throw new Error(LOW_POWER);
+  }
+  return { who, silent };
 }
 
 /* wanted: a board this page knows and does not have. the browser does not always give a page back the
  * cable of a board plugged in before it started (seen with CH340 boards in Chrome): its own list
  * then, with this board's USB chip alone when the page knows it */
 async function addBoard(wanted = null) {
+  if (app.busy || app.settling) {
+    wizard();                                          // one board at a time: the one being flashed is in it
+    return;
+  }
   let port;
   try {
     port = await navigator.serial.requestPort({ filters: wanted?.usb ? [wanted.usb] : [] });
@@ -779,6 +932,9 @@ async function addBoard(wanted = null) {
   }
   const owner = app.units.find((u) => u.port === port && u.link);
   if (owner) {                                         // this cable is in use already: that is this board
+    if (wanted && owner !== wanted) {
+      say(`that port is ${owner.name}: ${wanted.name} is on another one`, 'dim');
+    }
     showLive(owner);
     return;
   }
@@ -789,30 +945,59 @@ async function addBoard(wanted = null) {
   app.kind = null;
   app.ours = false;
   app.chip = null;
+  app.mac = null;
+  const before = wanted?.port ?? null;
+  if (wanted) {
+    wanted.port = port;                                // what this cable carries shows in its PORT window, answer or not
+    fillPort(wanted);
+  }
+  const notHere = () => {
+    if (wanted) {
+      wanted.port = before;
+      fillPort(wanted);
+    }
+  };
+  const again = () => addBoard(wanted);
   try {
-    const { unit, who } = await tryPort(port);
+    const { unit, who, silent } = await tryPort(port);
     if (unit) {
       say(`${unit.name}: Flight Radar ${unit.version}`, 'dim');
       if (wanted && unit !== wanted) {
+        notHere();
         say(`that port is ${unit.name}: ${wanted.name} is on another one`, 'dim');
       }
-      showLive(unit);
+      showLive(unit, { top: true });
       return;
     }
     if (who) {                                         // an older Flight Radar: it can't name itself
+      notHere();
       app.ours = true;
       say(`Flight Radar ${who.version}`, 'dim');
       showBoards(true, who.version);
       return;
     }
+    if (wanted) {
+      // a board with this firmware on it that does not answer: its chip's bootloader would only keep it dark.
+      // and no tries by themselves on this port: a cable that carries nothing back needs a hand
+      wanted.nextLook = Infinity;
+      trouble(silent ? 'Nothing came from that port' : 'That port does not answer as a Flight Radar', silent
+        ? `The cable carried not a single byte back. Take the cable of ${wanted.name} out and put it back: it then comes back by itself, or with TRY AGAIN.`
+        : 'Is it the right port? PORT shows what came along it.', { again, unit: wanted });
+      return;
+    }
     say('no Flight Radar on it, asking the chip', 'dim');
-    const found = await detect(port, (t) => say(t, 'board', port));
+    const found = await detect(port, (t) => say(t, 'page', port));
     app.chip = found.chip;
+    app.mac = found.mac;                               // a board on its chip's own USB comes back on a new port after flashing
     say(`chip ${found.name}`, 'dim');
     showBoards(!found.chip);
   } catch (e) {
     console.warn(e);
-    trouble('The board did not answer', `${e.message}. Is the port free, and is it the right one? Close any other page that uses it. What the board said: CONSOLE, then log --all.`);
+    if (wanted) {
+      wanted.nextLook = Infinity;
+    }
+    trouble(e.notOpened ? 'The port did not open' : 'The board did not answer', e.notOpened ? `${e.message}.`
+      : `${e.message}. Is it the right port? What came along it: ${wanted ? 'PORT' : 'CONSOLE, then log --all'}.`, { again, unit: wanted });
   }
 }
 
@@ -869,7 +1054,7 @@ async function flashing(port, build, name, erase, others) {
         $('fill').style.width = `${pct}%`;
       }
       $('barstate').textContent = `FLASHING ${name.toUpperCase()} ${pct}%`;
-    }, (t) => say(t, 'board', port));
+    }, (t) => say(t, 'page', port));
   } finally {
     app.busy = null;
   }
@@ -887,11 +1072,11 @@ async function afterFlash(port) {
         if (unit) {
           return unit;
         }
-        say('no answer yet', 'board', port);
+        say('no answer yet', 'page', port);
       } catch (e) {
         console.warn(e);
         app.why = e.message;
-        say(e.message, 'board', port);
+        say(e.message, 'page', port);
       }
       await wait(1500);
     }
@@ -912,9 +1097,10 @@ async function flashNew() {
     trouble('Flashing stopped', `${e.message}. Nothing was left half way that a new try can't fix.`);
     return;
   }
-  const u = await afterFlash(port);
+  // a board on its chip's own USB comes back as a new port, and the browser's connect event brings it
+  const u = (await afterFlash(port)) ?? app.units.find((x) => x.mac === app.mac && x.online);
   if (u) {
-    showLive(u);
+    showLive(u, { top: true });
   } else {
     stage(`<h2>Flashed</h2><p>The firmware is on the board, but the page could not reach it: ${esc(app.why)}. Press its reset button, or plug it in again, and connect it. What it said: CONSOLE, then log --all.</p><div class="row"><button class="btn" id="again">CONNECT</button></div>`);
     $('again').addEventListener('click', () => addBoard());
@@ -922,8 +1108,12 @@ async function flashNew() {
 }
 
 async function update(u) {
+  if (!u.link) {
+    throw new Error(`${u.name} is not connected`);
+  }
   manage();
   const port = u.port;
+  app.port = port;                                     // the connect window is about this port now
   const link = u.link;
   u.link = null;
   u.online = false;
@@ -934,7 +1124,7 @@ async function update(u) {
 
 async function updateThen(u) {
   try {
-    showLive(await update(u));
+    showLive(await update(u), { top: true });
   } catch (e) {
     console.warn(e);
     trouble('Flashing stopped', e.message);
@@ -1019,9 +1209,9 @@ function liveNote(u) {
     return '<p class="note wait"><b>Too little power.</b> The board restarts each time its WiFi starts, so this picture is not what it shows. Try another USB port, a shorter cable or a powered hub.</p>';
   }
   if (!u.wifi) {
-    return '<p class="note wait"><b>No WiFi yet.</b> Touch this screen and the board moves too. SETTINGS has the WiFi.</p>';
+    return '<p class="note wait"><b>No WiFi yet.</b> SETTINGS has the WiFi.</p>';
   }
-  return `<p class="note"><b>On "${esc(u.wifi)}".</b> Touch this screen and the board moves too.</p>`;
+  return `<p class="note"><b>On "${esc(u.wifi)}".</b></p>`;
 }
 
 async function findHome(text) {
@@ -1145,6 +1335,7 @@ function panePart(u, tab) {
     pane.querySelector('.rename')?.addEventListener('change', (e) => {
       u.name = e.target.value.trim() || u.name;
       w.setTitle(u.name);
+      desk.get(portId(u))?.setTitle(`${u.name}: port`);
       remember();
       renderBar();
     });
@@ -1161,6 +1352,7 @@ function panePart(u, tab) {
       app.units = app.units.filter((v) => v !== u);
       remember();
       desk.remove(u.mac);
+      desk.remove(portId(u));
       say(`board forget "${u.name}"`, 'cmd');
       app.cur = null;
       renderBar();
@@ -1181,15 +1373,20 @@ function fillBoard(u) {
   if (u && !u.online) {
     w.body.innerHTML = `<div class="gone"><p>Not connected. Plug it in and it comes back by itself.</p>
       <p>Plugged in already? The browser does not always give this page its cable back: take the cable out
-      and put it back, or pick its port.</p><p><button class="btn again find">FIND ITS PORT</button></p>
+      and put it back, or pick its port.</p><p class="row"><button class="btn again find">FIND ITS PORT</button><button class="btn quiet again port">PORT</button></p>
       <dl class="facts">${facts(u).map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div>`;
     w.q('.find').addEventListener('click', () => addBoard(u));
+    w.q('.port').addEventListener('click', () => portWin(u));
     return;
   }
   const round = u && BOARDS[u.build].round;
-  w.body.innerHTML = `<div class="bw"><div class="main"><div class="gl glass"></div>
+  // people took the screen here for a picture of one: over it, in words that can't be missed, that it is
+  // the board's own, now, and that a touch here reaches the board
+  const onair = u ? '<div class="onair"><p><i></i><b>LIVE</b><span>your board\'s own screen, right now</span></p><small>Touch it here and the board moves too</small></div>'
+    : '<div class="onair demo"><p><b>DEMO</b><span>a radar in this page, no board on it</span></p></div>';
+  w.body.innerHTML = `<div class="bw"><div class="main">${onair}<div class="gl glass"></div>
     <div class="zoom"><button class="zo" aria-label="smaller">-</button><span class="zw"></span><button class="zi" aria-label="bigger">+</button>
-    <button class="again settings">SETTINGS</button>${u ? '<button class="again flash">FLASH AGAIN</button>' : ''}</div>
+    <button class="again settings">SETTINGS</button>${u ? '<button class="again port">PORT</button><button class="again flash">FLASH AGAIN</button>' : ''}</div>
     <div class="livenote">${liveNote(u)}</div>${u ? screenWords(u) : ''}</div>
     <div class="side" hidden><div class="tabs" role="tablist"><button role="tab" data-tab="setup">SETUP</button><button role="tab" data-tab="view">VIEW</button><button role="tab" data-tab="board">BOARD</button></div><div class="pane"></div></div></div>`;
   const gl = w.q('.gl');
@@ -1199,8 +1396,12 @@ function fillBoard(u) {
   w.body.querySelectorAll('[data-screen]').forEach((el) => {
     el.addEventListener('click', () => term.run(`screen ${el.dataset.screen} --board ${short(u)}`));
   });
+  w.q('.onair i')?.addEventListener('animationend', (e) => {
+    e.target.classList.remove('beat');                // back to its steady blink
+  });
   w.q('.zo').addEventListener('click', () => zoomBy(u, -1));
   w.q('.zi').addEventListener('click', () => zoomBy(u, 1));
+  w.q('.port')?.addEventListener('click', () => portWin(u));
   /* flashing is not a click to make by accident: the first one only asks */
   const flash = w.q('.flash');
   flash?.addEventListener('click', () => {
@@ -1247,11 +1448,19 @@ function boardWin(u) {
   });
 }
 
-async function showLive(u) {
+/* top: a board just found or flashed. the page goes up to the picture, which shows that board now.
+ * background: it came by itself, its cable back in. the connect window, open about something else (a
+ * board being picked or flashed, a word about another port), is then left as it is, and the page does
+ * not move. one about this board or its port goes */
+async function showLive(u, { top = false, background = false } = {}) {
   if (u) {
     await u.ready;
   }
-  desk.get('connect')?.hide();
+  const wiz = desk.get('connect');
+  const midway = background && !!wiz && !wiz.root.hidden && app.troubleFor !== u && app.port !== u?.port;
+  if (!midway) {
+    wiz?.hide();
+  }
   app.cur = u ?? null;
   app.view = u ? 'unit' : 'demo';
   const w = boardWin(u);
@@ -1263,7 +1472,14 @@ async function showLive(u) {
   }
   renderBar();
   desk.layout();
-  w.root.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  if (midway) {
+    return;
+  }
+  if (top) {
+    scrollTo({ top: 0, behavior: 'smooth' });
+  } else {
+    w.root.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
 }
 
 /* the first board in this browser: a word that the screen here is the board's, for a little while */
@@ -1433,7 +1649,7 @@ function tickAll(now) {
 
 /* a board back on its cable. the browser's connect event mostly tells, but once, a CH340 on a bad cable,
  * it did not come: the port was there, connected and closed. so the page looks for itself too. a board
- * that does not answer is left alone for a while: each try restarts it */
+ * that does not answer is left alone for a while: each try is 7 seconds of asking */
 async function lookForReturns() {
   if (app.busy || app.settling) {
     return;
@@ -1445,11 +1661,11 @@ async function lookForReturns() {
         const { unit } = await tryPort(u.port);
         if (unit) {
           say(`${unit.name} is back`, 'dim');
-          showLive(unit);
+          showLive(unit, { top: true, background: true });
         }
       } catch (e) {
         console.warn(e);
-        say(`${u.name}: ${e.message}`, 'board', u.port);
+        say(`${u.name}: ${e.message}`, 'page', u.port);
       }
     }
   }
@@ -1473,30 +1689,34 @@ async function comeBack() {
   if (!('serial' in navigator)) {
     return;
   }
+  // first of all: a board plugged in while the others are being asked comes too
+  navigator.serial.addEventListener('connect', async (e) => {
+    await wait(800);
+    try {
+      const { unit } = await tryPort(e.target);
+      if (unit) {
+        showLive(unit, { top: true, background: true });
+      }
+    } catch (err) {
+      console.warn(err);
+    }
+  });
+  // all at once: one board that does not answer must not keep the others waiting 7 seconds each
   const ports = await navigator.serial.getPorts();
-  for (const port of ports) {
+  await Promise.all(ports.map(async (port) => {
     try {
       await tryPort(port);
     } catch (e) {
       console.warn('a remembered port', e);
       if (e.message === LOW_POWER) {
         trouble('A board does not start', `${LOW_POWER}.`);
+      } else if (e.notOpened) {
+        trouble('A port of your boards did not open', `${e.message}.`);
       }
     }
-  }
-  navigator.serial.addEventListener('connect', async (e) => {
-    await wait(800);
-    try {
-      const { unit } = await tryPort(e.target);
-      if (unit) {
-        showLive(unit);
-      }
-    } catch (err) {
-      console.warn(err);
-    }
-  });
+  }));
   for (const u of here()) {
-    await showLive(u);
+    await showLive(u, { top: true, background: true });
   }
   setInterval(lookForReturns, 3000);
 }

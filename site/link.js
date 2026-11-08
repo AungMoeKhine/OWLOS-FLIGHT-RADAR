@@ -11,6 +11,10 @@ const links = new WeakMap();
  * restarting is full of them, a CP210x reports them, a CH340 hardly ever */
 const LINE_ERRORS = ['BreakError', 'BufferOverrunError', 'FramingError', 'ParityError'];
 
+/* a write the cable has not taken in this long is dropped. a USB chip that stopped answering would
+ * otherwise hold the port's writer for ever, and a port with a writer on it can never close again */
+const WRITE_MS = 2000;
+
 export class Link {
   constructor(port) {
     this.port = port;
@@ -18,16 +22,31 @@ export class Link {
     this.lines = [];
     this.writing = Promise.resolve();
     this.onLine = null;                                // every line, the log too
+    this.onSent = null;                                // every line the page sends
     this.onLost = null;
+    this.bytes = 0;                                    // all that came, lines or not
+    this.attached = false;                             // a board of ours, sending its planes
+    this.ended = false;                                // nothing more comes from the port
   }
 
   async open() {
     await links.get(this.port)?.close();
     links.set(this.port, this);
-    await this.port.open({ baudRate: 115200, bufferSize: 65536 });
+    try {
+      await this.port.open({ baudRate: 115200, bufferSize: 65536 });
+    } catch (e) {
+      const why = new Error(`The port did not open (${e.message}). Another tab or program may have it: the previous page, a serial monitor. Or its USB chip stopped answering: take the cable out and put it back`);
+      why.notOpened = true;
+      throw why;
+    }
     this.opened = true;
-    // both lines released: the board runs. on the CYD this may restart it, it then says READY anyway
-    await this.port.setSignals({ dataTerminalReady: false, requestToSend: false });
+    // the browser opens a port with DTR and RTS both on. RTS goes off first, then DTR: on the usual
+    // two-transistor circuit EN is never pulled low that way, and on the chip's own USB the line state
+    // never passes through "reset". so opening does not restart the board. DTR first did, on every
+    // open, and on the chip's own USB under Windows, whose driver may not send an RTS change alone
+    // (esptool works round it), it could hold the chip in reset: a dark screen until the cable came out
+    await within(this.port.setSignals({ requestToSend: false }), 1000);
+    await within(this.port.setSignals({ dataTerminalReady: false }), 1000);
     this.pumping = this.pump();
   }
 
@@ -43,6 +62,7 @@ export class Link {
             this.closing = true;
             break;
           }
+          this.bytes += value.length;
           text += decoder.decode(value, { stream: true });
           let i;
           while ((i = text.indexOf('\n')) >= 0) {
@@ -66,6 +86,8 @@ export class Link {
         this.reader.releaseLock();
       }
     }
+    this.ended = true;
+    clearInterval(this.keep);                          // nothing more comes: asking for the planes is over
     this.onLost?.();
   }
 
@@ -80,12 +102,24 @@ export class Link {
   }
 
   // a newline first: bytes garbled while the board restarts would otherwise glue onto the command.
-  // one at a time: the port has one writer
+  // one at a time: the port has one writer. a write that failed fails alone, the next ones still go
   send(line) {
-    this.writing = this.writing.then(async () => {
-      const writer = this.port.writable.getWriter();
-      await writer.write(this.encoder.encode(`\n${line}\n`));
-      writer.releaseLock();
+    this.writing = this.writing.catch(() => {}).then(async () => {
+      const writable = this.port.writable;
+      if (!writable) {
+        throw new Error('the port is closed');         // and nothing went
+      }
+      const writer = writable.getWriter();
+      this.onSent?.(line);
+      try {
+        const went = await within(writer.write(this.encoder.encode(`\n${line}\n`)).then(() => true), WRITE_MS);
+        if (!went) {
+          await within(writer.abort().catch(() => {}), 1000);
+          throw new Error(`the cable took nothing for ${WRITE_MS / 1000} s`);
+        }
+      } finally {
+        writer.releaseLock();
+      }
     });
     return this.writing;
   }
@@ -125,16 +159,17 @@ export class Link {
     this.onLost = null;
     this.onLine = null;
     clearInterval(this.keep);
-    links.delete(this.port);
+    if (links.get(this.port) === this) {              // a newer link on this port stays known
+      links.delete(this.port);
+    }
     if (!this.opened) {
       return;
     }
     this.opened = false;
-    try {
-      await within(this.send('OWLOS SKY OFF'), 800);   // a board that does not read must not hold the port
-    } catch (e) {
-      console.warn(e);
+    if (this.attached) {
+      this.send('OWLOS SKY OFF').catch((e) => console.warn(e));   // the board stops sending its planes
     }
+    await this.writing.catch(() => {});                // every write done or dropped: none holds the port
     this.closing = true;
     try {
       await within(this.reader?.cancel(), 1000);
@@ -143,7 +178,7 @@ export class Link {
     }
     await within(this.pumping, 1000);
     try {
-      await this.port.close();
+      await within(this.port.close(), 2000);
     } catch (e) {
       console.warn(e);
     }

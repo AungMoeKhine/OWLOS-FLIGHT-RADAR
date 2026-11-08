@@ -1058,7 +1058,8 @@ export function startScene(canvas, getRadar, onPick) {
     const r = world.router;
     callout('router', iso(r.x + 20, r.y + 26, r.z), -64, 44, 4, 'YOUR ROUTER', 'the planes come home over WiFi');
     const b = boardCorners(world.board);
-    callout('board', iso(b.x + b.L * 0.5, b.y, b.z + b.h + 12), -22, -74, 5, 'YOUR BOARD', 'draws them on its own screen');
+    // with a board on the cable its screen here is the board's own, now: the callout says so
+    callout('board', iso(b.x + b.L * 0.5, b.y, b.z + b.h + 12), -22, -74, 5, sky ? 'YOUR BOARD, LIVE' : 'YOUR BOARD', sky ? 'its own screen, right now' : 'draws them on its own screen');
   }
 
   function draw(t) {

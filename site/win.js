@@ -15,9 +15,11 @@ const ICON = {
 };
 
 class Win {
-  constructor(desk, id, title, { onFront = () => {}, onClose = () => {}, onResize = () => {}, className = '' }) {
+  /* dock: a place of its own on the page instead of a tile on the desk. it is not dragged */
+  constructor(desk, id, title, { onFront = () => {}, onClose = () => {}, onResize = () => {}, className = '', dock = null }) {
     this.desk = desk;
     this.id = id;
+    this.docked = !!dock;
     this.onFront = onFront;
     this.onClose = onClose;
     this.onResize = onResize;
@@ -33,7 +35,7 @@ class Win {
     this.setTitle(title);
     this.at = null;                                    // { x, y } once it was moved
     this.listen();
-    desk.el.append(this.root);
+    (dock ?? desk.el).append(this.root);
     new ResizeObserver(() => desk.layout()).observe(this.root);
   }
 
@@ -109,7 +111,7 @@ class Win {
       }
     });
     this.bar.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('[data-act]') || this.maxed || this.desk.flat()) {
+      if (e.target.closest('[data-act]') || this.maxed || this.docked || this.desk.flat()) {
         return;
       }
       this.desk.hold();
@@ -218,7 +220,7 @@ export class Desk {
   /* one is being moved by hand: the others stay exactly where they are, no tile jumps away */
   hold() {
     for (const w of this.wins.values()) {
-      if (!w.root.hidden && !w.maxed && !w.at) {
+      if (!w.root.hidden && !w.maxed && !w.docked && !w.at) {
         w.at = { x: w.root.offsetLeft, y: w.root.offsetTop };
       }
     }
@@ -231,7 +233,7 @@ export class Desk {
     const xs = [[0, 0], [this.el.clientWidth, -w]];
     const ys = [[0, 0]];
     for (const o of this.wins.values()) {
-      if (o !== win && !o.root.hidden && !o.maxed) {
+      if (o !== win && !o.root.hidden && !o.maxed && !o.docked) {
         const r = o.root;
         xs.push([r.offsetLeft, 0], [r.offsetLeft, -w - GAP], [r.offsetLeft + r.offsetWidth, -w], [r.offsetLeft + r.offsetWidth + GAP, 0]);
         ys.push([r.offsetTop, 0], [r.offsetTop, -h - GAP], [r.offsetTop + r.offsetHeight, -h], [r.offsetTop + r.offsetHeight + GAP, 0]);
@@ -270,7 +272,7 @@ export class Desk {
       this.el.style.height = '';
       return;
     }
-    const shown = [...this.wins.values()].filter((w) => !w.root.hidden && !w.maxed);
+    const shown = [...this.wins.values()].filter((w) => !w.root.hidden && !w.maxed && !w.docked);
     const tiles = [];
     for (const w of shown.filter((v) => !v.at)) {
       const r = w.root;

@@ -23,9 +23,13 @@
       if (this.readable) {
         throw new DOMException('The port is already open.', 'InvalidStateError');
       }
+      this.opens = (this.opens ?? 0) + 1;               // a test counts them: one try, one open
       this.fresh();
       this.writable = new WritableStream({
-        write: (chunk) => this.heard(new TextDecoder().decode(chunk)),
+        // stuck: a USB chip that takes nothing, its writes end only when aborted
+        write: (chunk, c) => (this.b.stuck ? new Promise((resolve, reject) => {
+          c.signal.addEventListener('abort', () => reject(c.signal.reason));
+        }) : this.heard(new TextDecoder().decode(chunk))),
       });
       if (this.b.build === 'ili9486') {                // a CP210x says so when a board restarts: the read breaks
         setTimeout(() => this.noise(), 30);
@@ -65,6 +69,9 @@
     }
 
     async close() {
+      if (this.readable?.locked || this.writable?.locked) {   // as the browser's: a stream in use keeps the port open
+        throw new TypeError('Cannot close: a stream is locked');
+      }
       clearInterval(this.sky);
       this.out = null;
       this.readable = null;
@@ -75,7 +82,11 @@
       this.out?.enqueue(new TextEncoder().encode(`${text}\r\n`));
     }
 
+    /* mute: a cable that carries nothing back, as a CH340 sometimes does until it is plugged in again */
     heard(text) {
+      if (this.b.mute) {
+        return;
+      }
       this.text += text;
       let i;
       while ((i = this.text.indexOf('\n')) >= 0) {
@@ -103,7 +114,12 @@
           answer();
           this.sky = setInterval(answer, 15000);
         } else if (l.startsWith('OWLOS SET ')) {
-          const set = JSON.parse(l.slice(10));
+          let set;
+          try {
+            set = JSON.parse(l.slice(10));
+          } catch (e) {
+            continue;                                  // a line typed wrong in a PORT window: the board lets it pass
+          }
           if (set.screen !== undefined) {
             this.b.screen = set.screen;
           }
@@ -116,9 +132,35 @@
     }
   }
   const ports = BOARDS.map((b) => new FakePort(b));
+  // test.html?allow=0,1: the ports this browser was allowed before, given back at the start as getPorts does
+  for (const i of (new URLSearchParams(location.search).get('allow') ?? '').split(',').filter(Boolean)) {
+    ports[Number(i)].allowed = true;
+  }
   let given = 0;
   const fake = new EventTarget();
-  fake.requestPort = async () => ports[given++ % ports.length];
-  fake.getPorts = async () => [];
+  fake.requestPort = async () => {
+    const port = ports[given++ % ports.length];
+    port.allowed = true;
+    return port;
+  };
+  fake.getPorts = async () => ports.filter((p) => p.allowed && p.connected);
   Object.defineProperty(navigator, 'serial', { value: fake, configurable: true });
+  window.fakePorts = ports;                            // a test reaches its boards: fakePorts[0].b.mute = true
+  window.fakeNext = (i) => {                            // and picks the port the next list gives
+    given = i;
+  };
+  /* the cable out, or in again: the browser's disconnect and connect events, their target the port */
+  const tell = (name, port) => {
+    const e = new Event(name);
+    Object.defineProperty(e, 'target', { value: port });
+    fake.dispatchEvent(e);
+  };
+  window.fakeUnplug = (i) => {
+    ports[i].unplug();
+    tell('disconnect', ports[i]);
+  };
+  window.fakePlug = (i) => {
+    ports[i].plug();
+    tell('connect', ports[i]);
+  };
 })();

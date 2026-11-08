@@ -144,6 +144,18 @@
   .boothint p { margin: 0; }
   .boothint .chips { justify-content: center; margin: 6px 0; }
   .boothint .chip[aria-pressed="true"] { color: #03081a; background: var(--warn); border-color: var(--warn); }
+  /* over a board's screen: the board's own, now, not a picture of it */
+  .onair { margin: 0 auto 10px; text-align: center; }
+  .onair p { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 9px; margin: 0; font: 700 15px var(--mono); }
+  .onair b { padding: 2px 9px; color: #fff; background: #e0243a; border-radius: 3px; letter-spacing: 2px; box-shadow: 0 0 14px rgba(255, 59, 82, .45); }
+  .onair i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #ff3b52; box-shadow: 0 0 9px #ff3b52; animation: onair 1.4s ease-in-out infinite; }
+  .onair i.beat { animation: beat .4s ease-out; }
+  .onair span { color: var(--focus); }
+  .onair small { display: block; margin-top: 3px; color: var(--dim); font-size: 13px; }
+  .onair.demo b { background: #2c6a9c; box-shadow: none; }
+  @keyframes onair { 50% { opacity: .2; } }
+  @keyframes beat { from { transform: scale(2); background: #fff; } }
+  @media (prefers-reduced-motion: reduce) { .onair i, .onair i.beat { animation: none; } }
 
   .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); }
   .tabs button {
@@ -257,6 +269,22 @@
   .zoom button.flash { color: var(--warn); background: rgba(255, 184, 72, .1); border-color: var(--warn); }
   .zoom button.flash.armed { color: #03081a; background: var(--warn); }
   .again { width: auto !important; padding: 0 12px !important; font-size: 13px !important; letter-spacing: 1px; }
+  /* connecting and flashing, over the picture: not dragged, never over the bar */
+  .sky > .win { top: 12px; left: 0; right: 0; z-index: 12 !important; margin: 0 auto; }
+  .sky > .win .winbar { cursor: default; }
+  /* a board's PORT window: what went along its cable */
+  .win.port { width: min(720px, calc(100vw - 32px)); }
+  .win.port .winbody { padding: 0 1px 1px; }
+  .portlog {
+    height: 300px; padding: 6px 10px; overflow: auto; color: #cfe7f7; background: #000; font: 13px/1.45 var(--mono);
+    resize: vertical; scrollbar-width: thin; scrollbar-color: #2c6a9c transparent;
+  }
+  .portlog div { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .portlog .l-out { color: var(--prim); }
+  .portlog .l-page { color: var(--warn); }
+  .portlog .l-sky { color: #6b8fb2; }
+  .portsend { display: flex; gap: 6px; padding: 4px 10px 6px; color: var(--prim); background: #000; border-top: 1px solid var(--line); font: 13px var(--mono); }
+  .portsend input { flex: 1; min-width: 0; padding: 0; color: #fff; background: none; border: 0; outline: none; font: inherit; caret-color: #7dffa8; }
   #termlog div { min-height: 1.45em; white-space: pre-wrap; overflow-wrap: anywhere; }
   #termline { display: flex; }
   #termprompt { flex: none; white-space: pre; }
@@ -265,6 +293,7 @@
   @media (max-width: 719px) {
     #desk { margin: 6px 12px 0; }
     .win { position: static !important; width: auto; max-width: none; margin-bottom: 12px; }
+    .sky > .win { margin: 0 12px 12px; }
     .bw { flex-direction: column; }
     .bw .side { width: 100%; }
 
@@ -294,7 +323,7 @@
   <a href="previous/">Previous page</a>
 </header>
 
-<div class="sky">
+<div class="sky" id="sky">
 <canvas id="scene" role="img" aria-label="Planes and a helicopter send their position by radio. Volunteers' antennas catch it and pass it to the network's servers. The planes around your home come through your router and over WiFi to your board's screen."></canvas>
 <p id="hint">Click anything in the picture</p>
 <aside id="info" hidden></aside>

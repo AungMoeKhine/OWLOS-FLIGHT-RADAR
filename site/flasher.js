@@ -51,6 +51,8 @@ async function loader(port, say) {
   try {
     await esp.main();
   } catch (e) {
+    // the tries left the chip in its bootloader: dark, and dark until a restart. its own firmware again
+    await within(restart(transport).catch((x) => console.warn(x)), 2000);
     await letGo(port, transport);                      // a chip that did not answer must not keep the port
     throw e;
   }
