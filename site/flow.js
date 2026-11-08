@@ -286,16 +286,16 @@ let scene = null;
 
 function remember() {
   try {
-    localStorage.setItem(KEPT, JSON.stringify(app.units.map((u) => ({ mac: u.mac, name: u.name, build: u.build, zoom: u.screen.zoom }))));
+    localStorage.setItem(KEPT, JSON.stringify(app.units.map((u) => ({ mac: u.mac, name: u.name, build: u.build, zoom: u.screen.zoom, usb: u.usb }))));
   } catch (e) {
     console.warn(e);
   }
 }
 
-function addUnit({ mac, name, build, online = false, zoom = 1 }) {
+function addUnit({ mac, name, build, online = false, zoom = 1, usb = null }) {
   const screen = new Screen(BOARDS[build].twin);
   screen.zoom = zoom;
-  const u = { mac, name, build, online, version: '', wifi: null, nets: [], port: null, link: null, planes: 0, sky: [], screen, ready: screen.start() };
+  const u = { mac, name, build, online, usb, version: '', wifi: null, nets: [], port: null, link: null, planes: 0, sky: [], screen, ready: screen.start() };
   app.units.push(u);
   return u;
 }
@@ -637,7 +637,16 @@ function stage(html) {
 
 function trouble(title, text) {
   stage(`<h2>${esc(title)}</h2><p>${esc(text)}</p><div class="row"><button class="btn" id="again">TRY AGAIN</button></div>`);
-  $('again').addEventListener('click', addBoard);
+  $('again').addEventListener('click', () => addBoard());
+}
+
+/* the USB chip a board's cable ends in: the browser's list can then show the ports with that chip alone */
+function usbOf(port) {
+  const { usbVendorId, usbProductId } = port?.getInfo?.() ?? {};
+  if (!usbVendorId) {
+    return null;
+  }
+  return usbProductId ? { usbVendorId, usbProductId } : { usbVendorId };
 }
 
 /* a Flight Radar answered: it is one of your boards from now on */
@@ -653,6 +662,11 @@ async function attach(link, port, who) {
     throw new Error('the board did not say what it has');
   }
   Object.assign(u, { link, port, online: true, version: who.version, wifi: c.ssid || null, nets: c.nets ?? [], cfg: c });
+  const usb = usbOf(port);
+  if (usb && JSON.stringify(usb) !== JSON.stringify(u.usb)) {
+    u.usb = usb;
+    remember();
+  }
   u.screen.fromBoard(c);
   u.screen.onChange = (what) => {
     if (what & 1) {
@@ -750,10 +764,13 @@ async function tryPort(port) {
   }
 }
 
-async function addBoard() {
+/* wanted: a board this page knows and does not have. the browser does not always give a page back the
+ * cable of a board plugged in before it started (seen with CH340 boards in Chrome): its own list
+ * then, with this board's USB chip alone when the page knows it */
+async function addBoard(wanted = null) {
   let port;
   try {
-    port = await navigator.serial.requestPort();
+    port = await navigator.serial.requestPort({ filters: wanted?.usb ? [wanted.usb] : [] });
   } catch (e) {
     if (e.name !== 'NotFoundError') {
       trouble('No port', e.message);
@@ -776,6 +793,9 @@ async function addBoard() {
     const { unit, who } = await tryPort(port);
     if (unit) {
       say(`${unit.name}: Flight Radar ${unit.version}`, 'dim');
+      if (wanted && unit !== wanted) {
+        say(`that port is ${unit.name}: ${wanted.name} is on another one`, 'dim');
+      }
       showLive(unit);
       return;
     }
@@ -897,7 +917,7 @@ async function flashNew() {
     showLive(u);
   } else {
     stage(`<h2>Flashed</h2><p>The firmware is on the board, but the page could not reach it: ${esc(app.why)}. Press its reset button, or plug it in again, and connect it. What it said: CONSOLE, then log --all.</p><div class="row"><button class="btn" id="again">CONNECT</button></div>`);
-    $('again').addEventListener('click', addBoard);
+    $('again').addEventListener('click', () => addBoard());
   }
 }
 
@@ -1159,8 +1179,11 @@ function drawPane(u = app.cur) {
 function fillBoard(u) {
   const w = winOf(u);
   if (u && !u.online) {
-    w.body.innerHTML = `<div class="gone"><p>Not connected. Plug it in and it comes back by itself, no questions asked.</p>
+    w.body.innerHTML = `<div class="gone"><p>Not connected. Plug it in and it comes back by itself.</p>
+      <p>Plugged in already? The browser does not always give this page its cable back: take the cable out
+      and put it back, or pick its port.</p><p><button class="btn again find">FIND ITS PORT</button></p>
       <dl class="facts">${facts(u).map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div>`;
+    w.q('.find').addEventListener('click', () => addBoard(u));
     return;
   }
   const round = u && BOARDS[u.build].round;
@@ -1482,7 +1505,7 @@ $('try').addEventListener('click', () => {
   showLive(null);
 });
 if ('serial' in navigator) {
-  $('connect').addEventListener('click', addBoard);
+  $('connect').addEventListener('click', () => addBoard());
 } else {
   $('connect').hidden = true;
   $('cablenote').textContent = 'Connecting a board needs Chrome or Edge on a computer. Here you can look around.';

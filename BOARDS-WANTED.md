@@ -119,11 +119,18 @@ on the site; none of the built ones here has been run on that board yet unless i
   S3's own USB pins, so the console stays off that USB here. Missing: a second source. One manual
   lists a version without touch.
 
-## Guition 4.3": asked 2026-11-07, model not named
+## Guition 4.3": asked 2026-11-07; ESP32-4827S043 named 2026-11-08
 
 - Asked: will one of the binaries work with the older Guition 4.3" ESP32 modules? No 4.3" build exists.
 - An 800x480 RGB one (Sunton ESP32-8048S043 and its kin) may take the JC8048W550 build, not tried and its
   pins not checked. The 480x272 JC4827W543 (QSPI NV3041A) needs a new build. Missing: the exact model.
+- Asked 2026-11-08, maybe the same person: "my display is not one you have firmware for... The display
+  is an ESP32-4827S043". Tried a couple of builds: no picture; the 5" one shows a picture that "spills
+  over", as an 800x480 frame on a 480x272 glass would.
+- The ESP32-4827S043: ESP32-S3, 4.3" 480x272 on the RGB bus, so lcd_rgb.c as on the 5" boards with its
+  own pins and timing. Sold as C (capacitive, GT911), R (resistive, XPT2046) and N (no touch). New for
+  the firmware: 272 rows, fewer than the 3.5" layout's 320, so the pages go smaller, not bigger as on
+  the 5". Pins not looked up yet. Missing: which letter, flash and PSRAM, whether they would test.
 
 ## Elecrow CrowPanel Advance 5.0": built 2026-11-05, experimental, runs on a viewer's V1.3
 
@@ -207,4 +214,5 @@ check each against a second source before a build. From the easiest port to the 
 - Another bus, esp_lcd has it: LilyGO T-Display S3 (8-bit parallel, 170x320, very common),
   ESP32-2432S022C (8-bit parallel), Guition JC3248W535 (3.5" QSPI AXS15231B, cheap and common, some
   batches ignore the window commands: whole frames from PSRAM), JC4827W543 (QSPI NV3041A).
-- RGB parallel 800x480 from PSRAM: Sunton ESP32-8048S043/050/070, ESP32-4827S043, JC8048W550C.
+- RGB parallel 800x480 from PSRAM: Sunton ESP32-8048S043/050/070, JC8048W550C. 480x272: ESP32-4827S043
+  (asked for, above).
