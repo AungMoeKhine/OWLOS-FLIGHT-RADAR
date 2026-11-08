@@ -30,7 +30,7 @@ async function letGo(port, transport) {
   }
 }
 
-const FAMILY = { ESP32: 'esp32', 'ESP32-S3': 's3', 'ESP32-C3': 'c3', 'ESP32-C5': 'c5' };
+const FAMILY = { ESP32: 'esp32', 'ESP32-S3': 's3', 'ESP32-C3': 'c3', 'ESP32-C5': 'c5', 'ESP32-P4': 'p4' };
 
 function terminal(say) {
   return {

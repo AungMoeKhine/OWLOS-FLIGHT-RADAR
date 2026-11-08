@@ -305,6 +305,54 @@ int tp_read(int *rx, int *ry)
     return 1;
 }
 
+#elif TOUCH_BSP
+/* the Tab5: the board package found the touch chip with the panel (lcd_dsi.c) and reads it through
+ * esp_lcd_touch. it counts the standing glass's pixels, 720 x 1280; the 5 cross alignment turns them */
+#include "esp_lcd_touch.h"      // before the package's touch.h, which wants its type
+#include "bsp/m5stack_tab5.h"
+#include "bsp/touch.h"
+
+static esp_lcd_touch_handle_t s_tp;
+static volatile int s_tp_irq;      // the chip pulled its line: there is a report to read
+static int s_tp_down;
+
+/* main.c asks every 15 ms. each ask is one to three reads over I2C at 100 kHz through the
+ * package, 5 ms each with the driver's queueing: 200 ms a frame with nobody touching. so the
+ * chip's interrupt line is watched instead, and it is asked only after the line spoke, or while
+ * a finger is on */
+static void IRAM_ATTR tp_irq(esp_lcd_touch_handle_t tp) { (void)tp; s_tp_irq = 1; }
+
+void tp_init(void)
+{
+    esp_err_t e = bsp_touch_new(NULL, &s_tp);
+    if (e != ESP_OK) {
+        s_tp = NULL;
+        ESP_LOGW(TAG, "no touch: %s, going on without", esp_err_to_name(e));
+        return;
+    }
+    s_tp_irq = 1;                                     // once at the start, in case a finger is already there
+    if (esp_lcd_touch_register_interrupt_callback(s_tp, tp_irq) != ESP_OK)
+        ESP_LOGW(TAG, "no touch interrupt: the chip is asked every time, slower");
+}
+
+int tp_read(int *rx, int *ry)
+{
+    if (!s_tp) return 0;
+    if (!s_tp_irq && !s_tp_down) return 0;
+    s_tp_irq = 0;
+    esp_lcd_touch_point_data_t p;
+    uint8_t n = 0;
+    esp_lcd_touch_read_data(s_tp);
+    if (esp_lcd_touch_get_data(s_tp, &p, &n, 1) != ESP_OK || !n) {
+        s_tp_down = 0;
+        return 0;
+    }
+    s_tp_down = 1;
+    *rx = p.x;
+    *ry = p.y;
+    return 1;
+}
+
 #else
 
 void tp_init(void) { ESP_LOGI(TAG, "this board has no touch"); }
