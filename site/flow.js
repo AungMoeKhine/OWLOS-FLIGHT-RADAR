@@ -28,7 +28,7 @@ const BOARDS = {
   crowadv28: { name: '2.8" CrowPanel Advance', spec: 'ESP32-S3, 320x240 IPS, capacitive touch', chip: 's3', w: 320, h: 240, inch: 2.8, touch: 'capacitive', twin: 'Twin1', shot: '02-live.png', screens: 'two' },
   crowadv50: { name: '5" CrowPanel Advance', spec: 'ESP32-S3, 800x480 IPS, capacitive touch', chip: 's3', w: 800, h: 480, inch: 5, touch: 'capacitive', twin: 'Twin', shot: 'crowadv50/02-live.png', screens: 'two' },
   jc8048w550: { name: '5" Guition JC8048W550', spec: 'ESP32-S3, 800x480, capacitive touch', chip: 's3', w: 800, h: 480, inch: 5, touch: 'capacitive', twin: 'Twin', shot: 'crowadv50/02-live.png', screens: 'two' },
-  tab5: { name: '5" M5Stack Tab5', spec: 'ESP32-P4 and C6, 1280x720 IPS, capacitive touch', chip: 'p4', w: 1280, h: 720, inch: 5, touch: 'capacitive', twin: 'Twin', shot: 'crowadv50/02-live.png' },
+  tab5: { name: '5" M5Stack Tab5', spec: 'ESP32-P4 and C6, 1280x720 IPS, capacitive touch, experimental', chip: 'p4', w: 1280, h: 720, inch: 5, touch: 'capacitive', twin: 'Twin', shot: 'crowadv50/02-live.png' },
 };
 const CHIP_NAME = { esp32: 'ESP32', s3: 'ESP32-S3', c3: 'ESP32-C3', c5: 'ESP32-C5', p4: 'ESP32-P4' };
 const THEMES = ['arctic', 'phosphor', 'amber', 'crimson', 'synth'];

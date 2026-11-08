@@ -57,9 +57,11 @@ The map under them comes from OpenStreetMap.
 - **1.28" round** (Elecrow CrowPanel): ESP32-C3, GC9A01 240x240, capacitive touch.
 - **3.5" RPi LCD** (Waveshare RPi LCD (A) on the OWLOSAirQuality board): ESP32, ILI9486 480x320, no touch.
 - **5" M5Stack Tab5**: ESP32-P4 with an ESP32-C6 for the WiFi, 720x1280 IPS on MIPI-DSI turned to lie
-  flat, capacitive touch, through Espressif's board package. Runs on one here: the WiFi, planes, the map
-  and the touch work. No BOOT the firmware can see; its console is the USB port alone, the fonts are
-  the 5" boards' for now.
+  flat, capacitive touch, through Espressif's board package. Experimental, brought in by Paris Pitts
+  (pull request #7), who runs it on one Tab5 (ST7121 panel, board V1.0): the WiFi, planes, the map and
+  the touch work. Not run on one here yet, nor on the two other panels the Tab5 is sold with. No BOOT
+  the firmware can see; its console is the USB port alone, and the writing is smaller than on the other
+  5" boards for now.
 
 ## Flash it
 

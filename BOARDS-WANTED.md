@@ -175,6 +175,18 @@ on the site; none of the built ones here has been run on that board yet unless i
 - To learn from the asker: does the list of networks come now, does it join, are the colours right, does
   the picture shake while the map loads.
 
+## M5Stack Tab5: built 2026-11-08, experimental, runs on its author's
+
+- Not asked for: Paris Pitts brought it in, pull request #7, and runs it on a Tab5 with the ST7121
+  panel (board V1.0): the WiFi, planes, the map and the touch.
+- ESP32-P4 (16 MB flash, 32 MB PSRAM), 720x1280 IPS on MIPI-DSI, the WiFi on an ESP32-C6 over SDIO with
+  ESP-Hosted. Espressif's board package (espressif/m5stack_tab5) tells the three panels apart at power
+  on: ILI9881C with a GT911, ST7123, ST7121 with its own touch. The other two not seen.
+- No BOOT reaches the P4; the console is the chip's own USB. The fonts are the 5" boards' 3/2 ones, a 9/4
+  bake is to come.
+- To learn from anyone with one: which panel it has, does the flash from the site go through, does the
+  WiFi join.
+
 ## Others on sale, nobody asked yet
 
 Looked up 2026-11-03 to see what else people build things like this on. Pins are in the board JSONs

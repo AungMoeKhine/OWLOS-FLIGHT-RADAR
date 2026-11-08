@@ -11,8 +11,9 @@ The site keeps the firmware of each version: a new number here keeps the one bef
 - A new page: a picture of how the planes reach your board, one CONNECT button, and all your boards at once,
   each with its own live screen and settings. The page you know stays, a link away.
 - A board says which build it runs and its MAC when a page asks, so a page can keep several boards apart.
-- The M5Stack Tab5: ESP32-P4, 720x1280 on MIPI-DSI, its WiFi on the C6 beside it. The 5" pages 9/4 as
-  big, turned by the P4's pixel engine. Run on a real one, with planes.
+- The M5Stack Tab5, experimental: ESP32-P4, 720x1280 on MIPI-DSI, its WiFi on the C6 beside it. The 5"
+  pages 9/4 as big, turned by the P4's pixel engine, the writing smaller for now. Brought in by Paris
+  Pitts, who runs it on one with planes; not run on one here yet. Tell us how it goes.
 
 ## 0.7
 

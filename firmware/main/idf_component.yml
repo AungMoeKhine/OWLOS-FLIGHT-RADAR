@@ -9,11 +9,11 @@ dependencies:
     rules:
       - if: "target == esp32p4"
   espressif/esp_lcd_touch:       # the package reads the touch through it, touch.c asks it for the points
-    version: "*"
+    version: "^1.2.1"    # the newest when the Tab5 was built; a 2.x may change the calls touch.c makes
     rules:
       - if: "target == esp32p4"
   espressif/esp_wifi_remote:
-    version: "*"
+    version: "^1.6.5"    # the newest when the Tab5 was built; 1.6.3 and older refuse an esp_hosted 3.x
     rules:
       - if: "target == esp32p4"
   espressif/esp_hosted:
