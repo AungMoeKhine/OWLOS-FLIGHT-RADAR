@@ -1,6 +1,6 @@
-/*
- * ═══════════════════════════════════════════════════════════════════════════════
- *  OWLOS FLIGHT RADAR — UNIVERSAL ARDUINO EDITION
+﻿/*
+ * â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+ *  OWLOS FLIGHT RADAR â€” UNIVERSAL ARDUINO EDITION
  *  Real-Time Aircraft Radar with ADS-B Live Tracking & Offline Simulator
  *  Powered by AMK_CYD_Universal_TFT (v1.6.3)
  *
@@ -15,7 +15,7 @@
  *   - 10-read sample LDR moving-average priming at boot
  *   - adjustBrightness() as FIRST line of void loop()
  *   - 80 MHz High-Speed SPI clock acceleration
- * ═══════════════════════════════════════════════════════════════════════════════
+ * â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
  */
 
 #include <Arduino.h>
@@ -59,7 +59,7 @@ extern "C" int net_up(void) {
   return WiFi.status() == WL_CONNECTED;
 }
 
-// ── Required External Symbols for Core ────────────────────────────────────────
+// â”€â”€ Required External Symbols for Core â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 extern "C" {
   int GFX_W = 320;
   int GFX_H = 240;
@@ -71,14 +71,14 @@ static uint32_t my_clock_us() {
   return (uint32_t)micros();
 }
 
-// ── Global Hardware Instances ─────────────────────────────────────────────────
+// â”€â”€ Global Hardware Instances â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 AMK_CYD_display display;
 AMK_CYD_touch touch;
 TFT_eSPI tft;
 
 Preferences prefs;
 
-// ── LDR Sensor & Backlight Configuration ──────────────────────────────────────
+// â”€â”€ LDR Sensor & Backlight Configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #define LDR_PIN 34
 #define NUM_LDR_READINGS 10
 
@@ -88,7 +88,7 @@ int activeBrightness = 180;
 int lastLDRValue = 0;
 int screenRotation = 3;  // Landscape default
 
-// ── Radar Engine & Aircraft State ─────────────────────────────────────────────
+// â”€â”€ Radar Engine & Aircraft State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ui_t g_ui;
 sky_t g_sky;
 demo_t g_demo;
@@ -101,7 +101,7 @@ static const int STRIP_H = 4;
 uint32_t *g_strip_px = NULL;
 uint16_t *g_strip_565 = NULL;
 
-// ── IRAM & PSRAM Allocation Helper (from Denis Kirin's main.c) ────────────────
+// â”€â”€ IRAM & PSRAM Allocation Helper (from Denis Kirin's main.c) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static void *iram_first(size_t bytes) {
   if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) > 100000) {
     void *p = heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM);
@@ -119,7 +119,7 @@ bool isWifiConnected = false;
 uint32_t lastApiFetchMs = 0;
 static uint32_t s_scan_start_ms = 0;
 
-// ── Dynamic Resolution Layout Calculator ──────────────────────────────────────
+// â”€â”€ Dynamic Resolution Layout Calculator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 void computeLayout() {
   int sw = tft.width();
   int sh = tft.height();
@@ -147,7 +147,7 @@ void computeLayout() {
   Serial.printf("[Radar Layout] Screen: %dx%d | Active: %dx%d\n", sw, sh, GFX_PW, GFX_PH);
 }
 
-// ── Backlight Auto-Dimming per RULE[user_global] ──────────────────────────────
+// â”€â”€ Backlight Auto-Dimming per RULE[user_global] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 void adjustBrightness() {
   static int lastAppliedBrightness = -1;
 
@@ -186,7 +186,7 @@ void adjustBrightness() {
   }
 }
 
-// ── Rear RGB LED Handler ──────────────────────────────────────────────────────
+// â”€â”€ Rear RGB LED Handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 void updateLED() {
   uint8_t rgb[3] = { 0, 0, 0 };
   light_colour(&g_light, &g_ui.light, millis(), rgb);
@@ -196,7 +196,7 @@ void updateLED() {
   analogWrite(17, 255 - rgb[2]);
 }
 
-// ── Original OWLOS Network & Streaming Reader Architecture ──────────────────
+// â”€â”€ Original OWLOS Network & Streaming Reader Architecture â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 typedef struct {
   char *b;
@@ -281,7 +281,7 @@ extern "C" int net_get(const char *url, const char *bearer, net_sink_fn sink, vo
   return len;
 }
 
-// ── WebSerial / Companion Site Protocol Support ──────────────────────────────
+// â”€â”€ WebSerial / Companion Site Protocol Support â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static volatile uint32_t s_sky_until = 0;
 static volatile uint32_t s_pick = 0;
 static volatile int s_pick_new = 0;
@@ -316,11 +316,11 @@ static void sky_out(void) {
   }
 }
 
-// ── WebSerial Device Configuration Publisher (Digital Twin Sync) ──────────────
+// â”€â”€ WebSerial Device Configuration Publisher (Digital Twin Sync) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static void say_cfg(void) {
   const char *curSsid = (WiFi.status() == WL_CONNECTED) ? WiFi.SSID().c_str() : "";
   Serial.printf("OWLOS CFG {\"ssid\":\"%s\",\"nets\":[\"%s\"],\"lat\":%.4f,\"lon\":%.4f,\"place\":\"%s\",\"country\":\"%s\",\"src\":\"%s\",\"key\":false,"
-                "\"up\":%d,\"flip\":%d,\"theme\":%d,\"look\":%d,\"map\":1,\"ground\":%d,\"watch\":\"\","
+                "\"up\":%d,\"flip\":%d,\"theme\":%d,\"look\":%d,\"map\":1,\"ground\":%d,\"watch\":\"%s\","
                 "\"vectors\":%d,\"beam_step\":%d,\"clock\":%d,\"block\":%d,\"autopilot\":%d,\"lost\":%d,\"conflict\":%d,"
                 "\"fl_lo\":%d,\"fl_hi\":%d,\"utc\":%u,\"version\":\"0.8\",\"newest\":\"0.8\","
                 "\"range\":%.2f,\"dist_unit\":%d,\"alt_unit\":%d,\"labels\":%d}\n",
@@ -330,6 +330,7 @@ static void say_cfg(void) {
                 g_ui.cfg.source == SRC_FR24 ? "fr24" : "free",
                 g_ui.cfg.up, g_ui.cfg.flip, g_ui.cfg.theme, g_ui.cfg.look,
                 g_ui.cfg.ground,
+                g_ui.watch_text,
                 g_ui.opt.vectors, g_ui.opt.beam_step, g_ui.opt.clock, g_ui.opt.block,
                 g_ui.opt.autopilot, g_ui.opt.lost, g_ui.opt.conflict,
                 g_ui.opt.fl_lo, g_ui.opt.fl_hi,
@@ -338,13 +339,13 @@ static void say_cfg(void) {
   Serial.flush();
 }
 
-// ── OpenStreetMap Engine State & Service ──────────────────────────────────────
+// â”€â”€ OpenStreetMap Engine State & Service â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static map_t s_map;
 static map_plan_t s_plan;
 static int s_map_read = 0;
 static uint32_t s_map_try = 0;
 
-// ── HTTPS OpenStreetMap Tile Downloader (esp_http_client ~12 KB RAM) ─────────
+// â”€â”€ HTTPS OpenStreetMap Tile Downloader (esp_http_client ~12 KB RAM) â”€â”€â”€â”€â”€â”€â”€â”€â”€
 extern "C" int fetch_tile_https(const char *url, void *writer, int (*put_fn)(void *, const void *, uint32_t)) {
   if (WiFi.status() != WL_CONNECTED) return 0;
   static char buf[1024];
@@ -428,7 +429,7 @@ void map_service(const fr_cfg_t *c) {
                 read, s_plan.ntiles, c->place, (double)c->lat, (double)c->lon, (double)c->range);
 }
 
-// ── Home Geocoding & Finding ──────────────────────────────────────────────────
+// â”€â”€ Home Geocoding & Finding â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static char s_home_ask[64] = "";
 
 bool geocodeLocation(const char *query);
@@ -465,7 +466,7 @@ static void home_find() {
 #define DEMO_BYTES 6144
 #define FREE_EVERY_MS 5000u
 
-// ── Core 0 Network Fetch Task (Faithful Denis Kirin Architecture) ─────────────
+// â”€â”€ Core 0 Network Fetch Task (Faithful Denis Kirin Architecture) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 void networkTask(void *pvParameters) {
   (void)pvParameters;
   static sky_reader_t rd;
@@ -612,7 +613,7 @@ void networkTask(void *pvParameters) {
   }
 }
 
-// ── Asynchronous Wi-Fi Scanner & State Machine ────────────────────────────────
+// â”€â”€ Asynchronous Wi-Fi Scanner & State Machine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 void handleWifiScan() {
   if (g_ui.net.scan != SCAN_RUNNING) return;
 
@@ -666,7 +667,7 @@ void handleWifiScan() {
   WiFi.scanDelete();
 }
 
-// ── JSON Helper for Geocoding & Config Parsing ───────────────────────────────
+// â”€â”€ JSON Helper for Geocoding & Config Parsing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static const char *findJsonField(const char *json, const char *key) {
   if (!json || !key) return NULL;
   size_t kl = strlen(key);
@@ -711,7 +712,7 @@ static bool getJsonNum(const char *json, const char *key, double *out) {
   return true;
 }
 
-// ── Global Home Location Update (Memory + NVS Flash) ──────────────────────────
+// â”€â”€ Global Home Location Update (Memory + NVS Flash) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 void updateHomeLocation(float lat, float lon, const char *place, const char *country) {
   if (xSemaphoreTake(s_lock, pdMS_TO_TICKS(150)) == pdTRUE) {
     g_ui.cfg.lat = lat;
@@ -746,7 +747,7 @@ void updateHomeLocation(float lat, float lon, const char *place, const char *cou
                 lat, lon, g_ui.cfg.place, g_ui.cfg.country);
 }
 
-// ── OpenStreetMap Nominatim Geocoder (with Offline Built-in Fast Path) ───────
+// â”€â”€ OpenStreetMap Nominatim Geocoder (with Offline Built-in Fast Path) â”€â”€â”€â”€â”€â”€â”€
 bool geocodeLocation(const char *query) {
   // 1. Instant Offline Lookup from Built-in Database
   const BuiltinCity *city = findBuiltinCity(query);
@@ -818,7 +819,7 @@ bool geocodeLocation(const char *query) {
   }
 }
 
-// ── Touch Gesture & Interaction Handling ──────────────────────────────────────
+// â”€â”€ Touch Gesture & Interaction Handling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 void handleTouch() {
   uint16_t tx = 0, ty = 0;
   bool down = tft.getTouch(&tx, &ty);
@@ -845,6 +846,8 @@ void handleTouch() {
     prefs.putInt("flip", g_ui.cfg.flip);
     prefs.putInt("look", g_ui.cfg.look);
     prefs.putInt("map", g_ui.cfg.map);
+    prefs.putInt("ground", g_ui.cfg.ground);
+    prefs.putInt("labels", g_ui.cfg.labels);
     prefs.end();
 
     s_map_try = 0;  // Trigger map refresh when range, look or map toggle changes
@@ -908,6 +911,16 @@ void handleTouch() {
     prefs.end();
   }
 
+  // Watchlist updated from screen (tap WATCH in panel or typed in keyboard)
+  if (cmd.watch) {
+    watch_set(&g_ui.watch, g_ui.watch_text);
+    prefs.begin("owlos_radar", false);
+    prefs.putString("watch", g_ui.watch_text);
+    prefs.end();
+    Serial.printf("[WATCHLIST] Saved: \"%s\" (%d targets)\n", g_ui.watch_text, g_ui.watch.n);
+    if (page_there()) say_cfg();
+  }
+
   // Home location changed from screen keyboard (SETUP -> DATA -> HOME)
   if (cmd.home) {
     if (xSemaphoreTake(s_lock, pdMS_TO_TICKS(50)) == pdTRUE) {
@@ -918,7 +931,7 @@ void handleTouch() {
   }
 }
 
-// ── Frame Rendering Pipeline (Strip-by-Strip Blit) ────────────────────────────
+// â”€â”€ Frame Rendering Pipeline (Strip-by-Strip Blit) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 void renderFrame() {
   canvas_t cv;
   cv.px = g_strip_px;
@@ -975,16 +988,16 @@ void renderFrame() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  SETUP & MAIN LOOP
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 void setup() {
   Serial.begin(115200);
   delay(100);
   setCpuFrequencyMhz(240);  // Lock ESP32 Xtensa Dual-Core to maximum 240 MHz turbo clock
   Serial.println("\n=======================================================");
-  Serial.println("  OWLOS FLIGHT RADAR — UNIVERSAL ARDUINO EDITION");
+  Serial.println("  OWLOS FLIGHT RADAR â€” UNIVERSAL ARDUINO EDITION");
   Serial.println("  Universal CYD & ESP32-S3 Auto-Detect Firmware");
   Serial.println("=======================================================\n");
 
@@ -1003,6 +1016,8 @@ void setup() {
   int savedFlip = prefs.getInt("flip", 0);
   int savedLook = prefs.getInt("look", LOOK_RADAR);
   int savedMap = prefs.getInt("map", 1);
+  int savedGround = prefs.getInt("ground", 0);
+  int savedLabels = prefs.getInt("labels", 0);
   prefs.end();
 
   if (savedFlip) screenRotation = 1;
@@ -1064,19 +1079,37 @@ void setup() {
   g_ui.cfg.flip = savedFlip;
   g_ui.cfg.look = savedLook;
   g_ui.cfg.map = savedMap;
+  g_ui.cfg.ground = savedGround;
+  g_ui.cfg.labels = savedLabels;
   ui_set_theme(&g_ui, g_ui.cfg.theme);
 
-  // Initialize RGB LED Pins (Active-LOW, Red: 4, Green: 16, Blue: 17)
+  // Initialize RGB LED Pins (Active-LOW, Red: 4 or 22, Green: 16, Blue: 17)
   pinMode(4, OUTPUT);
   pinMode(16, OUTPUT);
   pinMode(17, OUTPUT);
+  pinMode(22, OUTPUT);
   analogWrite(4, 255);   // off
   analogWrite(16, 255);  // off
   analogWrite(17, 255);  // off
+  analogWrite(22, 255);  // off
   light_defaults(&g_ui.light);
 
-  // Load persistent home location from Preferences (if saved)
+  // Load persistent options, LED settings, watchlist, and home location from Preferences
   prefs.begin("owlos_radar", false);
+  if (prefs.isKey("opt")) {
+    prefs.getBytes("opt", &g_ui.opt, sizeof(g_ui.opt));
+  } else {
+    scope_opt_defaults(&g_ui.opt);
+  }
+  if (prefs.isKey("light")) {
+    prefs.getBytes("light", &g_ui.light, sizeof(g_ui.light));
+  }
+  if (prefs.isKey("watch")) {
+    String w = prefs.getString("watch", "");
+    strncpy(g_ui.watch_text, w.c_str(), sizeof(g_ui.watch_text) - 1);
+    watch_set(&g_ui.watch, g_ui.watch_text);
+    Serial.printf("[WATCHLIST] Loaded from NVS: \"%s\" (%d targets)\n", g_ui.watch_text, g_ui.watch.n);
+  }
   if (prefs.isKey("lat")) g_ui.cfg.lat = prefs.getFloat("lat", g_ui.cfg.lat);
   if (prefs.isKey("lon")) g_ui.cfg.lon = prefs.getFloat("lon", g_ui.cfg.lon);
   if (prefs.isKey("place")) {
@@ -1091,7 +1124,7 @@ void setup() {
   }
   prefs.end();
 
-  if (strcmp(g_ui.cfg.place, "Trenčín") == 0 || g_ui.cfg.place[0] == '\0') {
+  if (strcmp(g_ui.cfg.place, "TrenÄÃ­n") == 0 || g_ui.cfg.place[0] == '\0') {
     if (fabsf(g_ui.cfg.lat - 16.8409f) < 0.1f && fabsf(g_ui.cfg.lon - 96.1735f) < 0.1f) {
       strncpy(g_ui.cfg.place, "Yangon", sizeof(g_ui.cfg.place) - 1);
       strncpy(g_ui.cfg.country, "Myanmar", sizeof(g_ui.cfg.country) - 1);
@@ -1126,7 +1159,7 @@ void setup() {
   }
 }
 
-// ── Non-Blocking Serial Command Processor ─────────────────────────────────────
+// â”€â”€ Non-Blocking Serial Command Processor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 void handleSerialCommands() {
   static char s_rx_buf[256];
   static int s_rx_idx = 0;
@@ -1151,7 +1184,7 @@ void handleSerialCommands() {
           say_cfg();
         } else if (cmdLine.startsWith("OWLOS SKY ON")) {
           s_sky_until = millis() + 60000;
-          sky_out();  // Website ပေါ်တွင် လေယာဉ်များကို စောင့်စရာမလိုဘဲ ချက်ချင်း Display ပြသစေခြင်း
+          sky_out();  // Website á€•á€±á€«á€ºá€á€½á€„á€º á€œá€±á€šá€¬á€‰á€ºá€™á€»á€¬á€¸á€€á€­á€¯ á€…á€±á€¬á€„á€·á€ºá€…á€›á€¬á€™á€œá€­á€¯á€˜á€² á€á€»á€€á€ºá€á€»á€„á€ºá€¸ Display á€•á€¼á€žá€…á€±á€á€¼á€„á€ºá€¸
           if (g_netTaskHandle) xTaskNotifyGive(g_netTaskHandle);
         } else if (cmdLine.startsWith("OWLOS PICK")) {
           const char *p = cmdLine.c_str() + 10;
@@ -1212,15 +1245,34 @@ void handleSerialCommands() {
           }
 
           // 3. Radar Display Options
-          if (getJsonNum(j, "vectors", &v)) g_ui.opt.vectors = v != 0;
-          if (getJsonNum(j, "beam_step", &v)) g_ui.opt.beam_step = v != 0;
-          if (getJsonNum(j, "clock", &v)) g_ui.opt.clock = v != 0;
-          if (getJsonNum(j, "block", &v)) g_ui.opt.block = v != 0;
-          if (getJsonNum(j, "autopilot", &v)) g_ui.opt.autopilot = v != 0;
-          if (getJsonNum(j, "lost", &v)) g_ui.opt.lost = v != 0;
-          if (getJsonNum(j, "conflict", &v)) g_ui.opt.conflict = v != 0;
-          if (getJsonNum(j, "fl_lo", &v) && v >= 0 && v <= SCOPE_FL_MAX) g_ui.opt.fl_lo = (int16_t)v;
-          if (getJsonNum(j, "fl_hi", &v) && v >= 0 && v <= SCOPE_FL_MAX) g_ui.opt.fl_hi = (int16_t)v;
+          bool opt_changed = false;
+          if (getJsonNum(j, "vectors", &v)) { if (g_ui.opt.vectors != (v != 0)) { g_ui.opt.vectors = v != 0; opt_changed = true; } }
+          if (getJsonNum(j, "beam_step", &v)) { if (g_ui.opt.beam_step != (v != 0)) { g_ui.opt.beam_step = v != 0; opt_changed = true; } }
+          if (getJsonNum(j, "clock", &v)) { if (g_ui.opt.clock != (v != 0)) { g_ui.opt.clock = v != 0; opt_changed = true; } }
+          if (getJsonNum(j, "block", &v)) { if (g_ui.opt.block != (v != 0)) { g_ui.opt.block = v != 0; opt_changed = true; } }
+          if (getJsonNum(j, "autopilot", &v)) { if (g_ui.opt.autopilot != (v != 0)) { g_ui.opt.autopilot = v != 0; opt_changed = true; } }
+          if (getJsonNum(j, "lost", &v)) { if (g_ui.opt.lost != (v != 0)) { g_ui.opt.lost = v != 0; opt_changed = true; } }
+          if (getJsonNum(j, "conflict", &v)) { if (g_ui.opt.conflict != (v != 0)) { g_ui.opt.conflict = v != 0; opt_changed = true; } }
+          if (getJsonNum(j, "fl_lo", &v) && v >= 0 && v <= SCOPE_FL_MAX) { if (g_ui.opt.fl_lo != (int16_t)v) { g_ui.opt.fl_lo = (int16_t)v; opt_changed = true; } }
+          if (getJsonNum(j, "fl_hi", &v) && v >= 0 && v <= SCOPE_FL_MAX) { if (g_ui.opt.fl_hi != (int16_t)v) { g_ui.opt.fl_hi = (int16_t)v; opt_changed = true; } }
+
+          if (opt_changed) {
+            prefs.begin("owlos_radar", false);
+            prefs.putBytes("opt", &g_ui.opt, sizeof(g_ui.opt));
+            prefs.end();
+          }
+
+          // 4. Watchlist Sync
+          char swatch[WATCH_TEXT] = { 0 };
+          if (getJsonStr(j, "watch", swatch, sizeof(swatch))) {
+            if (strcmp(g_ui.watch_text, swatch) != 0) {
+              strncpy(g_ui.watch_text, swatch, sizeof(g_ui.watch_text) - 1);
+              watch_set(&g_ui.watch, g_ui.watch_text);
+              prefs.begin("owlos_radar", false);
+              prefs.putString("watch", g_ui.watch_text);
+              prefs.end();
+            }
+          }
 
           if (cfg_changed) {
             ui_set_cfg(&g_ui, &c);
@@ -1234,6 +1286,8 @@ void handleSerialCommands() {
             prefs.putInt("flip", g_ui.cfg.flip);
             prefs.putInt("look", g_ui.cfg.look);
             prefs.putInt("map", g_ui.cfg.map);
+            prefs.putInt("ground", g_ui.cfg.ground);
+            prefs.putInt("labels", g_ui.cfg.labels);
             prefs.end();
 
             s_map_try = 0;  // Trigger map refresh/re-plan
@@ -1256,8 +1310,8 @@ void handleSerialCommands() {
                         WiFi.status() == WL_CONNECTED ? "CONNECTED" : "OFFLINE",
                         WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
           Serial.printf("  Free Heap: %u bytes\n", ESP.getFreeHeap());
-          Serial.printf("  Radar Range: %d %s\n", g_ui.cfg.range, g_ui.cfg.dist_unit == 1 ? "NM" : g_ui.cfg.dist_unit == 2 ? "MI"
-                                                                                                                           : "KM");
+          Serial.printf("  Radar Range: %d %s\n", (int)g_ui.cfg.range, g_ui.cfg.dist_unit == 1 ? "NM" : g_ui.cfg.dist_unit == 2 ? "MI" : "KM");
+          Serial.printf("  Watchlist (%d): \"%s\"\n", g_ui.watch.n, g_ui.watch_text);
           Serial.println("---------------------------------");
         } else if (cmdLine.equalsIgnoreCase("HELP")) {
           Serial.println("\n--- LOCATION COMMAND GUIDE ---");
@@ -1273,8 +1327,26 @@ void handleSerialCommands() {
         } else if (cmdLine.startsWith("CITY ") || cmdLine.startsWith("city ")) {
           String cityName = cmdLine.substring(5);
           cityName.trim();
-          Serial.printf("[SERIAL] Looking up city: \"%s\"...\n", cityName.c_str());
-          geocodeLocation(cityName.c_str());
+          if (cityName.length() > 0) {
+            const BuiltinCity *city = findBuiltinCity(cityName.c_str());
+            if (city != NULL) {
+              updateHomeLocation(city->lat, city->lon, city->display, city->country);
+              char msg[40];
+              snprintf(msg, sizeof(msg), "HOME: %s", city->display);
+              toast(&g_ui, msg);
+              Serial.printf("[LOCATION] Matched built-in city: %s, %s (%.4f, %.4f)\n",
+                            city->display, city->country, city->lat, city->lon);
+              if (g_netTaskHandle) xTaskNotifyGive(g_netTaskHandle);
+            } else {
+              // Safe queueing for Core 0 networkTask to avoid dual-core TLS race condition
+              if (xSemaphoreTake(s_lock, pdMS_TO_TICKS(50)) == pdTRUE) {
+                snprintf(s_home_ask, sizeof(s_home_ask), "%s", cityName.c_str());
+                xSemaphoreGive(s_lock);
+                if (g_netTaskHandle) xTaskNotifyGive(g_netTaskHandle);
+                Serial.printf("[SERIAL] City lookup safely queued for Core 0: \"%s\"\n", cityName.c_str());
+              }
+            }
+          }
         } else {
           const char *p = cmdLine.c_str();
           if (strncasecmp(p, "HOME ", 5) == 0) p += 5;
@@ -1294,8 +1366,24 @@ void handleSerialCommands() {
             toast(&g_ui, msg);
             Serial.printf("[SERIAL] Home location updated: %s %s (%.4f, %.4f)\n", pl, co, lat, lon);
           } else if (isalpha(p[0])) {
-            Serial.printf("[SERIAL] Looking up city: \"%s\"...\n", p);
-            geocodeLocation(p);
+            const BuiltinCity *city = findBuiltinCity(p);
+            if (city != NULL) {
+              updateHomeLocation(city->lat, city->lon, city->display, city->country);
+              char msg[40];
+              snprintf(msg, sizeof(msg), "HOME: %s", city->display);
+              toast(&g_ui, msg);
+              Serial.printf("[LOCATION] Matched built-in city: %s, %s (%.4f, %.4f)\n",
+                            city->display, city->country, city->lat, city->lon);
+              if (g_netTaskHandle) xTaskNotifyGive(g_netTaskHandle);
+            } else {
+              // Safe queueing for Core 0 networkTask
+              if (xSemaphoreTake(s_lock, pdMS_TO_TICKS(50)) == pdTRUE) {
+                snprintf(s_home_ask, sizeof(s_home_ask), "%s", p);
+                xSemaphoreGive(s_lock);
+                if (g_netTaskHandle) xTaskNotifyGive(g_netTaskHandle);
+                Serial.printf("[SERIAL] City lookup safely queued for Core 0: \"%s\"\n", p);
+              }
+            }
           } else {
             Serial.println("[SERIAL] Unknown command! Type HELP for available commands.");
           }
